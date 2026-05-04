@@ -36,6 +36,22 @@ db.serialize(() => {
     endDate TEXT,
     FOREIGN KEY(mareId) REFERENCES mares(id)
   );`);
+  db.run(`CREATE TABLE IF NOT EXISTS stallions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    breed TEXT
+  );`);
+  db.run(`CREATE TABLE IF NOT EXISTS collections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    stallionId INTEGER,
+    mareId INTEGER,
+    cycleId INTEGER,
+    date TEXT,
+    method TEXT,
+    FOREIGN KEY(stallionId) REFERENCES stallions(id),
+    FOREIGN KEY(mareId) REFERENCES mares(id),
+    FOREIGN KEY(cycleId) REFERENCES cycles(id)
+  );`);
 });
 
 // Helper: generate JWT
@@ -118,6 +134,44 @@ app.post('/api/mares/:mareId/cycles', authMiddleware, (req, res) => {
   stmt.run(mareId, startDate, endDate, function (err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ id: this.lastID, startDate, endDate });
+  });
+});
+
+// ---------- Stallion routes (protected) ----------
+// Create stallion
+app.post('/api/stallions', authMiddleware, (req, res) => {
+  const { name, breed } = req.body;
+  const stmt = db.prepare('INSERT INTO stallions (name, breed) VALUES (?, ?)');
+  stmt.run(name, breed, function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ id: this.lastID, name, breed });
+  });
+});
+
+// List stallions
+app.get('/api/stallions', authMiddleware, (req, res) => {
+  db.all('SELECT * FROM stallions', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+// Add collection day (sync with mare cycle)
+app.post('/api/collections', authMiddleware, (req, res) => {
+  const { stallionId, mareId, cycleId, date, method } = req.body; // method: live|cooled|frozen
+  const stmt = db.prepare('INSERT INTO collections (stallionId, mareId, cycleId, date, method) VALUES (?, ?, ?, ?, ?)');
+  stmt.run(stallionId, mareId, cycleId, date, method, function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ id: this.lastID, stallionId, mareId, cycleId, date, method });
+  });
+});
+
+// Export stallion report (simple JSON list of collections)
+app.get('/api/stallions/:id/report', authMiddleware, (req, res) => {
+  const stallionId = req.params.id;
+  db.all('SELECT * FROM collections WHERE stallionId = ?', [stallionId], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ stallionId, collections: rows });
   });
 });
 
