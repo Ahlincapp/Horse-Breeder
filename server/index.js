@@ -125,7 +125,10 @@ app.post('/api/mares/:mareId/cycles', authMiddleware, (req, res) => {
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 // Serve React static files
-const clientPath = path.join(__dirname, '../client/dist');
+const clientPath = process.env.NODE_ENV === 'production'
+  ? path.join(process.cwd(), 'client/dist')
+  : path.join(__dirname, '../client/dist');
+
 app.use(express.static(clientPath));
 
 // Serve React app for all other routes (SPA support)

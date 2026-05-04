@@ -4,7 +4,6 @@ services:
     env: node
     plan: free
     region: oregon
-    rootDir: .
     buildCommand: npm install && cd client && npm install && npm run build
     startCommand: node server/index.js
     envVars:
