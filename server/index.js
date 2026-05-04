@@ -179,9 +179,8 @@ app.get('/api/stallions/:id/report', authMiddleware, (req, res) => {
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 // Serve React static files
-const clientPath = process.env.NODE_ENV === 'production'
-  ? path.join(process.cwd(), 'client/dist')
-  : path.join(__dirname, '../client/dist');
+// Serve the built React app regardless of environment
+const clientPath = path.resolve(__dirname, '../client/dist');
 
 app.use(express.static(clientPath));
 
