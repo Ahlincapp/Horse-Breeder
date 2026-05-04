@@ -1,12 +1,14 @@
 services:
   - type: web
-    name: horse-breeder-api
+    name: horse-breeder
     env: node
     plan: free
     region: oregon
-    rootDir: ./server
-    buildCommand: npm install
-    startCommand: node index.js
+    rootDir: .
+    buildCommand: npm install && cd client && npm install && npm run build
+    startCommand: node server/index.js
     envVars:
       - key: JWT_SECRET
-        # set this in Render UI after deployment
+        generateValue: true
+      - key: NODE_ENV
+        value: production

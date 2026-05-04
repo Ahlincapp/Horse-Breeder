@@ -1,4 +1,5 @@
 // Simple Express backend for Horse Breeder app
+const path = require('path');
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -122,6 +123,15 @@ app.post('/api/mares/:mareId/cycles', authMiddleware, (req, res) => {
 
 // Health endpoint
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+
+// Serve React static files
+const clientPath = path.join(__dirname, '../client/dist');
+app.use(express.static(clientPath));
+
+// Serve React app for all other routes (SPA support)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(clientPath, 'index.html'));
+});
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`🚀 Server listening on http://localhost:${PORT}`));
