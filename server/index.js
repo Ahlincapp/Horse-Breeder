@@ -197,6 +197,17 @@ if (fs.existsSync(path.join(clientPath, 'index.html'))) {
 
 app.use(express.static(clientPath));
 
+// Debug endpoint to verify the built JS bundle is reachable
+app.get('/debug-bundle', (req, res) => {
+  const bundlePath = path.join(clientPath, 'assets', 'index-C2_b4UH9.js');
+  if (fs.existsSync(bundlePath)) {
+    res.type('application/javascript');
+    res.sendFile(bundlePath);
+  } else {
+    res.status(404).send('Bundle not found');
+  }
+});
+
 // Serve React app for all other routes (SPA support)
 app.get('*', (req, res) => {
   res.sendFile(path.join(clientPath, 'index.html'));
