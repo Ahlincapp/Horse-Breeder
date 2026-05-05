@@ -194,6 +194,15 @@ if (fs.existsSync(path.join(clientPath, 'index.html'))) {
   console.log('❌ index.html missing');
 }
 
+// Force correct MIME types for JS and CSS assets
+app.use((req, res, next) => {
+  if (req.path.endsWith('.js')) {
+    res.type('application/javascript');
+  } else if (req.path.endsWith('.css')) {
+    res.type('text/css');
+  }
+  next();
+});
 
 app.use(express.static(clientPath));
 
