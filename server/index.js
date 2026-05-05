@@ -181,6 +181,19 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 // Serve React static files
 // Serve the built React app regardless of environment
 const clientPath = path.resolve(__dirname, '../client/dist');
+console.log('📂 clientPath =', clientPath);
+const fs = require('fs');
+if (fs.existsSync(clientPath)) {
+  console.log('✅ clientPath exists');
+} else {
+  console.log('❌ clientPath missing');
+}
+if (fs.existsSync(path.join(clientPath, 'index.html'))) {
+  console.log('✅ index.html exists');
+} else {
+  console.log('❌ index.html missing');
+}
+
 
 app.use(express.static(clientPath));
 
