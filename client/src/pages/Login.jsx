@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -29,6 +29,7 @@ function Login() {
   return (
     <div style={{ maxWidth: '400px', margin: 'auto', padding: '1rem' }}>
       <h2>Login</h2>
+      <p>Don’t have an account? <Link to="/register">Register here</Link></p>
       {error && <p style={{ color: 'red' }}>{error}</p>}
       <form onSubmit={handleSubmit}>
         <div>
