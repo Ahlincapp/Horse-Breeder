@@ -1,7 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Register from './pages/Register.jsx';
 import Calendar from './pages/Calendar.jsx';
-import Schedule from './pages/Schedule.jsx';
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 
@@ -18,7 +17,6 @@ function App() {
           path="/"
           element={isLoggedIn ? <Dashboard /> : <Navigate to="/login" replace />}
         />
-        <Route path="/schedule" element={<Schedule />} />
         <Route path="/calendar" element={<Calendar />} />
       </Routes>
     </Router>
