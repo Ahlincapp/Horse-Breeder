@@ -6,3 +6,4 @@ client/node_modules/
 client/.npm-cache/
 client/package-lock.json
 .DS_Store
+.git-credentials
