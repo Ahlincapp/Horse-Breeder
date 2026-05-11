@@ -3,7 +3,7 @@ const path = require('path');
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const sqlite3 = require('sqlite3').verbose();
+const Database = require('better-sqlite3');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 
@@ -11,37 +11,36 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Initialise SQLite DB (file will be created automatically)
-const db = new sqlite3.Database('horsebreeder.db');
+const db = new Database('horsebreeder.db');
 
 // Create tables if they don't exist
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS users (
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL
-  );`);
-  db.run(`CREATE TABLE IF NOT EXISTS mares (
+  );
+  CREATE TABLE IF NOT EXISTS mares (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     userId INTEGER,
     name TEXT,
     birthDate TEXT,
     FOREIGN KEY(userId) REFERENCES users(id)
-  );`);
-  db.run(`CREATE TABLE IF NOT EXISTS cycles (
+  );
+  CREATE TABLE IF NOT EXISTS cycles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     mareId INTEGER,
     startDate TEXT,
     endDate TEXT,
     FOREIGN KEY(mareId) REFERENCES mares(id)
-  );`);
-  db.run(`CREATE TABLE IF NOT EXISTS stallions (
+  );
+  CREATE TABLE IF NOT EXISTS stallions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     breed TEXT
-  );`);
-  db.run(`CREATE TABLE IF NOT EXISTS collections (
+  );
+  CREATE TABLE IF NOT EXISTS collections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     stallionId INTEGER,
     mareId INTEGER,
@@ -51,8 +50,8 @@ db.serialize(() => {
     FOREIGN KEY(stallionId) REFERENCES stallions(id),
     FOREIGN KEY(mareId) REFERENCES mares(id),
     FOREIGN KEY(cycleId) REFERENCES cycles(id)
-  );`);
-});
+  );
+`);
 
 // Helper: generate JWT
 function generateToken(user) {
@@ -79,100 +78,117 @@ app.post('/api/register', (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) return res.status(400).json({ error: 'Missing fields' });
   const hashed = bcrypt.hashSync(password, 10);
-  const stmt = db.prepare('INSERT INTO users (name, email, password) VALUES (?, ?, ?)');
-  stmt.run(name, email, hashed, function (err) {
-    if (err) return res.status(400).json({ error: 'Email already used' });
-    const user = { id: this.lastID, name, email };
+  try {
+    const stmt = db.prepare('INSERT INTO users (name, email, password) VALUES (?, ?, ?)');
+    const result = stmt.run(name, email, hashed);
+    const user = { id: result.lastInsertRowid, name, email };
     const token = generateToken(user);
     res.json({ token, user });
-  });
+  } catch (err) {
+    res.status(400).json({ error: 'Email already used' });
+  }
 });
 
 app.post('/api/login', (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Missing fields' });
-  db.get('SELECT * FROM users WHERE email = ?', [email], (err, row) => {
-    if (err || !row) return res.status(401).json({ error: 'Invalid credentials' });
-    if (!bcrypt.compareSync(password, row.password)) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-    const token = generateToken(row);
-    res.json({ token, user: { id: row.id, name: row.name, email: row.email } });
-  });
+  const row = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+  if (!row) return res.status(401).json({ error: 'Invalid credentials' });
+  if (!bcrypt.compareSync(password, row.password)) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+  const token = generateToken(row);
+  res.json({ token, user: { id: row.id, name: row.name, email: row.email } });
 });
 
 // ---------- Mare routes (protected) ----------
 app.get('/api/mares', authMiddleware, (req, res) => {
-  db.all('SELECT * FROM mares WHERE userId = ?', [req.user.id], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
+  try {
+    const rows = db.prepare('SELECT * FROM mares WHERE userId = ?').all(req.user.id);
     res.json(rows);
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/mares', authMiddleware, (req, res) => {
   const { name, birthDate } = req.body;
-  const stmt = db.prepare('INSERT INTO mares (userId, name, birthDate) VALUES (?, ?, ?)');
-  stmt.run(req.user.id, name, birthDate, function (err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ id: this.lastID, name, birthDate });
-  });
+  try {
+    const stmt = db.prepare('INSERT INTO mares (userId, name, birthDate) VALUES (?, ?, ?)');
+    const result = stmt.run(req.user.id, name, birthDate);
+    res.json({ id: result.lastInsertRowid, name, birthDate });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ---------- Cycle routes (protected) ----------
 app.get('/api/mares/:mareId/cycles', authMiddleware, (req, res) => {
   const { mareId } = req.params;
-  db.all('SELECT * FROM cycles WHERE mareId = ?', [mareId], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
+  try {
+    const rows = db.prepare('SELECT * FROM cycles WHERE mareId = ?').all(mareId);
     res.json(rows);
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/mares/:mareId/cycles', authMiddleware, (req, res) => {
   const { mareId } = req.params;
   const { startDate, endDate } = req.body;
-  const stmt = db.prepare('INSERT INTO cycles (mareId, startDate, endDate) VALUES (?, ?, ?)');
-  stmt.run(mareId, startDate, endDate, function (err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ id: this.lastID, startDate, endDate });
-  });
+  try {
+    const stmt = db.prepare('INSERT INTO cycles (mareId, startDate, endDate) VALUES (?, ?, ?)');
+    const result = stmt.run(mareId, startDate, endDate);
+    res.json({ id: result.lastInsertRowid, startDate, endDate });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ---------- Stallion routes (protected) ----------
 // Create stallion
 app.post('/api/stallions', authMiddleware, (req, res) => {
   const { name, breed } = req.body;
-  const stmt = db.prepare('INSERT INTO stallions (name, breed) VALUES (?, ?)');
-  stmt.run(name, breed, function (err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ id: this.lastID, name, breed });
-  });
+  try {
+    const stmt = db.prepare('INSERT INTO stallions (name, breed) VALUES (?, ?)');
+    const result = stmt.run(name, breed);
+    res.json({ id: result.lastInsertRowid, name, breed });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // List stallions
 app.get('/api/stallions', authMiddleware, (req, res) => {
-  db.all('SELECT * FROM stallions', [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
+  try {
+    const rows = db.prepare('SELECT * FROM stallions').all();
     res.json(rows);
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Add collection day (sync with mare cycle)
 app.post('/api/collections', authMiddleware, (req, res) => {
-  const { stallionId, mareId, cycleId, date, method } = req.body; // method: live|cooled|frozen
-  const stmt = db.prepare('INSERT INTO collections (stallionId, mareId, cycleId, date, method) VALUES (?, ?, ?, ?, ?)');
-  stmt.run(stallionId, mareId, cycleId, date, method, function (err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ id: this.lastID, stallionId, mareId, cycleId, date, method });
-  });
+  const { stallionId, mareId, cycleId, date, method } = req.body;
+  try {
+    const stmt = db.prepare('INSERT INTO collections (stallionId, mareId, cycleId, date, method) VALUES (?, ?, ?, ?, ?)');
+    const result = stmt.run(stallionId, mareId, cycleId, date, method);
+    res.json({ id: result.lastInsertRowid, stallionId, mareId, cycleId, date, method });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Export stallion report (simple JSON list of collections)
 app.get('/api/stallions/:id/report', authMiddleware, (req, res) => {
   const stallionId = req.params.id;
-  db.all('SELECT * FROM collections WHERE stallionId = ?', [stallionId], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
+  try {
+    const rows = db.prepare('SELECT * FROM collections WHERE stallionId = ?').all(stallionId);
     res.json({ stallionId, collections: rows });
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Health endpoint
@@ -219,14 +235,15 @@ app.get('/debug-bundle', (req, res) => {
 
 // Seed default user (run once)
 app.get('/api/seed', (req, res) => {
-  db.get('SELECT email FROM users LIMIT 1', (err, row) => {
+  try {
+    const row = db.prepare('SELECT email FROM users LIMIT 1').get();
     if (row) return res.json({ message: 'User already exists' });
     const hash = bcrypt.hashSync('horse2026', 10);
-    db.run('INSERT INTO users (email, password, name) VALUES (?, ?, ?)', ['admin@horse.com', hash, 'Admin'], (err) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ message: 'Default user created', email: 'admin@horse.com', password: 'horse2026' });
-    });
-  });
+    db.prepare('INSERT INTO users (email, password, name) VALUES (?, ?, ?)').run(hash, 'admin@horse.com', 'Admin');
+    res.json({ message: 'Default user created', email: 'admin@horse.com', password: 'horse2026' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Serve React app for all other routes (SPA support)
