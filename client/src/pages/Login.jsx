@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 
 function Login() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -20,7 +20,9 @@ function Login() {
       if (!res.ok) throw new Error(data.error || 'Login failed');
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
-      navigate('/');
+      console.log('Login successful, token:', data.token);
+      // Force full page reload to load token
+      window.location.href = '/';
     } catch (err) {
       setError(err.message);
     }
@@ -47,3 +49,4 @@ function Login() {
 }
 
 export default Login;
+

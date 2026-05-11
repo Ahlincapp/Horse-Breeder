@@ -5,8 +5,6 @@ import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 
 function App() {
-  // Clear any stale auth token (e.g., after we wiped the users table)
-  localStorage.removeItem('token');
   const isLoggedIn = !!localStorage.getItem('token');
   return (
     <Router>
