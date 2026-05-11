@@ -11,73 +11,36 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-let db;
+const DB_FILE = path.join(__dirname, '..', 'database.json');
 
-// Initialize SQL.js database
-async function initDb() {
-  const initSqlJs = require('sql.js');
-  const SQL = await initSqlJs();
-  
-  // Try to load existing database
-  const dbPath = path.join(__dirname, '..', 'horsebreeder.db');
-  let data = null;
-  if (fs.existsSync(dbPath)) {
-    data = fs.readFileSync(dbPath);
+// Simple JSON database
+let db = {
+  users: [],
+  mares: [],
+  cycles: [],
+  stallions: [],
+  collections: []
+};
+
+// Load database from file
+function loadDb() {
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      const data = fs.readFileSync(DB_FILE, 'utf8');
+      db = JSON.parse(data);
+    }
+  } catch (err) {
+    console.log('Starting with empty database');
   }
-  
-  db = new SQL.Database(data ? new Uint8Array(data) : undefined);
-  
-  // Create tables if they don't exist
-  db.run(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      password TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS mares (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      userId INTEGER,
-      name TEXT,
-      birthDate TEXT,
-      FOREIGN KEY(userId) REFERENCES users(id)
-    );
-    CREATE TABLE IF NOT EXISTS cycles (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      mareId INTEGER,
-      startDate TEXT,
-      endDate TEXT,
-      FOREIGN KEY(mareId) REFERENCES mares(id)
-    );
-    CREATE TABLE IF NOT EXISTS stallions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      breed TEXT
-    );
-    CREATE TABLE IF NOT EXISTS collections (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      stallionId INTEGER,
-      mareId INTEGER,
-      cycleId INTEGER,
-      date TEXT,
-      method TEXT,
-      FOREIGN KEY(stallionId) REFERENCES stallions(id),
-      FOREIGN KEY(mareId) REFERENCES mares(id),
-      FOREIGN KEY(cycleId) REFERENCES cycles(id)
-    );
-  `);
-  
-  // Save to file
-  saveDb();
-  console.log('✅ Database initialized');
 }
 
+// Save database to file
 function saveDb() {
-  if (!db) return;
-  const data = db.export();
-  const buffer = Buffer.from(data);
-  fs.writeFileSync(path.join(__dirname, '..', 'horsebreeder.db'), buffer);
+  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
 }
+
+loadDb();
+console.log('✅ Database loaded');
 
 // Helper: generate JWT
 function generateToken(user) {
@@ -103,129 +66,100 @@ function authMiddleware(req, res, next) {
 app.post('/api/register', (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) return res.status(400).json({ error: 'Missing fields' });
-  const hashed = bcrypt.hashSync(password, 10);
-  try {
-    db.run('INSERT INTO users (name, email, password) VALUES (?, ?, ?)', [name, email, hashed]);
-    const lastId = db.exec('SELECT last_insert_rowid() as id')[0].values[0][0];
-    saveDb();
-    const user = { id: lastId, name, email };
-    const token = generateToken(user);
-    res.json({ token, user });
-  } catch (err) {
-    res.status(400).json({ error: 'Email already used' });
+  
+  if (db.users.find(u => u.email === email)) {
+    return res.status(400).json({ error: 'Email already used' });
   }
+  
+  const hashed = bcrypt.hashSync(password, 10);
+  const user = { id: Date.now(), name, email, password: hashed };
+  db.users.push(user);
+  saveDb();
+  
+  const token = generateToken(user);
+  res.json({ token, user: { id: user.id, name: user.name, email: user.email } });
 });
 
 app.post('/api/login', (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Missing fields' });
-  const stmt = db.prepare('SELECT * FROM users WHERE email = ?');
-  stmt.bind([email]);
-  if (stmt.step()) {
-    const row = stmt.getAsObject();
-    stmt.free();
-    if (!bcrypt.compareSync(password, row.password)) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-    const token = generateToken(row);
-    res.json({ token, user: { id: row.id, name: row.name, email: row.email } });
-  } else {
-    stmt.free();
-    res.status(401).json({ error: 'Invalid credentials' });
+  
+  const user = db.users.find(u => u.email === email);
+  if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+  
+  if (!bcrypt.compareSync(password, user.password)) {
+    return res.status(401).json({ error: 'Invalid credentials' });
   }
+  
+  const token = generateToken(user);
+  res.json({ token, user: { id: user.id, name: user.name, email: user.email } });
 });
 
 // ---------- Mare routes (protected) ----------
 app.get('/api/mares', authMiddleware, (req, res) => {
-  const stmt = db.prepare('SELECT * FROM mares WHERE userId = ?');
-  stmt.bind([req.user.id]);
-  const rows = [];
-  while (stmt.step()) {
-    rows.push(stmt.getAsObject());
-  }
-  stmt.free();
-  res.json(rows);
+  const mares = db.mares.filter(m => m.userId === req.user.id);
+  res.json(mares);
 });
 
 app.post('/api/mares', authMiddleware, (req, res) => {
   const { name, birthDate } = req.body;
-  db.run('INSERT INTO mares (userId, name, birthDate) VALUES (?, ?, ?)', [req.user.id, name, birthDate]);
-  const lastId = db.exec('SELECT last_insert_rowid() as id')[0].values[0][0];
+  const mare = { id: Date.now(), userId: req.user.id, name, birthDate };
+  db.mares.push(mare);
   saveDb();
-  res.json({ id: lastId, name, birthDate });
+  res.json(mare);
 });
 
 // ---------- Cycle routes (protected) ----------
 app.get('/api/mares/:mareId/cycles', authMiddleware, (req, res) => {
   const { mareId } = req.params;
-  const stmt = db.prepare('SELECT * FROM cycles WHERE mareId = ?');
-  stmt.bind([mareId]);
-  const rows = [];
-  while (stmt.step()) {
-    rows.push(stmt.getAsObject());
-  }
-  stmt.free();
-  res.json(rows);
+  const cycles = db.cycles.filter(c => c.mareId === parseInt(mareId));
+  res.json(cycles);
 });
 
 app.post('/api/mares/:mareId/cycles', authMiddleware, (req, res) => {
   const { mareId } = req.params;
   const { startDate, endDate } = req.body;
-  db.run('INSERT INTO cycles (mareId, startDate, endDate) VALUES (?, ?, ?)', [mareId, startDate, endDate]);
-  const lastId = db.exec('SELECT last_insert_rowid() as id')[0].values[0][0];
+  const cycle = { id: Date.now(), mareId: parseInt(mareId), startDate, endDate };
+  db.cycles.push(cycle);
   saveDb();
-  res.json({ id: lastId, startDate, endDate });
+  res.json(cycle);
 });
 
 // ---------- Stallion routes (protected) ----------
 app.post('/api/stallions', authMiddleware, (req, res) => {
   const { name, breed } = req.body;
-  db.run('INSERT INTO stallions (name, breed) VALUES (?, ?)', [name, breed]);
-  const lastId = db.exec('SELECT last_insert_rowid() as id')[0].values[0][0];
+  const stallion = { id: Date.now(), name, breed };
+  db.stallions.push(stallion);
   saveDb();
-  res.json({ id: lastId, name, breed });
+  res.json(stallion);
 });
 
 app.get('/api/stallions', authMiddleware, (req, res) => {
-  const stmt = db.prepare('SELECT * FROM stallions');
-  const rows = [];
-  while (stmt.step()) {
-    rows.push(stmt.getAsObject());
-  }
-  stmt.free();
-  res.json(rows);
+  res.json(db.stallions);
 });
 
 app.post('/api/collections', authMiddleware, (req, res) => {
   const { stallionId, mareId, cycleId, date, method } = req.body;
-  db.run('INSERT INTO collections (stallionId, mareId, cycleId, date, method) VALUES (?, ?, ?, ?, ?)', [stallionId, mareId, cycleId, date, method]);
-  const lastId = db.exec('SELECT last_insert_rowid() as id')[0].values[0][0];
+  const collection = { id: Date.now(), stallionId, mareId, cycleId, date, method };
+  db.collections.push(collection);
   saveDb();
-  res.json({ id: lastId, stallionId, mareId, cycleId, date, method });
+  res.json(collection);
 });
 
 app.get('/api/stallions/:id/report', authMiddleware, (req, res) => {
   const stallionId = req.params.id;
-  const stmt = db.prepare('SELECT * FROM collections WHERE stallionId = ?');
-  stmt.bind([stallionId]);
-  const rows = [];
-  while (stmt.step()) {
-    rows.push(stmt.getAsObject());
-  }
-  stmt.free();
-  res.json({ stallionId, collections: rows });
+  const collections = db.collections.filter(c => c.stallionId === parseInt(stallionId));
+  res.json({ stallionId, collections });
 });
 
 // ---------- Seed route ----------
 app.get('/api/seed', (req, res) => {
-  const stmt = db.prepare('SELECT email FROM users LIMIT 1');
-  if (stmt.step()) {
-    stmt.free();
+  if (db.users.length > 0) {
     return res.json({ message: 'User already exists' });
   }
-  stmt.free();
   const hash = bcrypt.hashSync('horse2026', 10);
-  db.run('INSERT INTO users (name, email, password) VALUES (?, ?, ?)', ['Admin', 'admin@horse.com', hash]);
+  const user = { id: Date.now(), name: 'Admin', email: 'admin@horse.com', password: hash };
+  db.users.push(user);
   saveDb();
   res.json({ message: 'Default user created', email: 'admin@horse.com', password: 'horse2026' });
 });
@@ -245,10 +179,4 @@ app.get('*', (req, res) => {
 
 // Start server
 const PORT = process.env.PORT || 4002;
-
-initDb().then(() => {
-  app.listen(PORT, () => console.log(`🚀 Server listening on http://localhost:${PORT}`));
-}).catch(err => {
-  console.error('Failed to init DB:', err);
-  process.exit(1);
-});
+app.listen(PORT, () => console.log(`🚀 Server listening on http://localhost:${PORT}`));
