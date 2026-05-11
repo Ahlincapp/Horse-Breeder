@@ -217,6 +217,18 @@ app.get('/debug-bundle', (req, res) => {
   }
 });
 
+// Seed default user (run once)
+app.get('/api/seed', (req, res) => {
+  db.get('SELECT email FROM users LIMIT 1', (err, row) => {
+    if (row) return res.json({ message: 'User already exists' });
+    const hash = bcrypt.hashSync('horse2026', 10);
+    db.run('INSERT INTO users (email, password, name) VALUES (?, ?, ?)', ['admin@horse.com', hash, 'Admin'], (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: 'Default user created', email: 'admin@horse.com', password: 'horse2026' });
+    });
+  });
+});
+
 // Serve React app for all other routes (SPA support)
 app.get('*', (req, res) => {
   res.sendFile(path.join(clientPath, 'index.html'));
