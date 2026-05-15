@@ -1,0 +1,15 @@
+{
+  "users": [
+    {
+      "id": 1778864389096,
+      "name": "Admin",
+      "email": "admin@horse.com",
+      "password": "$2b$10$809.rRqXqBCW33cfLCCkA.SZW.pvc/Uil.6Y5oTpAy3Xyue/AVqV2",
+      "created_at": "2026-05-15T16:59:49.096Z"
+    }
+  ],
+  "mares": [],
+  "cycles": [],
+  "stallions": [],
+  "collections": []
+}
