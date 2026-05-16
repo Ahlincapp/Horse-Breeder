@@ -196,21 +196,59 @@ app.get('/api/mares', authMiddleware, async (req, res) => {
 });
 
 app.post('/api/mares', authMiddleware, async (req, res) => {
-  const { name, birthDate } = req.body;
+  const { name, birthDate, lastBred } = req.body;
   try {
     if (usePostgres) {
       const result = await pool.query(
-        'INSERT INTO mares (user_id, name, birth_date) VALUES ($1, $2, $3) RETURNING *',
-        [req.user.id, name, birthDate]
+        'INSERT INTO mares (user_id, name, birth_date, last_bred) VALUES ($1, $2, $3, $4) RETURNING *',
+        [req.user.id, name, birthDate, lastBred || null]
       );
       const mare = result.rows[0];
-      res.json({ id: mare.id, userId: mare.user_id, name: mare.name, birthDate: mare.birth_date });
+      res.json({ id: mare.id, userId: mare.user_id, name: mare.name, birthDate: mare.birth_date, lastBred: mare.last_bred });
     } else {
-      const mare = { id: Date.now(), userId: req.user.id, name, birthDate, created_at: new Date().toISOString() };
+      const mare = { id: Date.now(), userId: req.user.id, name, birthDate, lastBred: lastBred || null, created_at: new Date().toISOString() };
       db.mares.push(mare);
       saveJsonDb();
       res.json(mare);
     }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/mares/:mareId', authMiddleware, async (req, res) => {
+  const { mareId } = req.params;
+  const { name, birthDate, lastBred } = req.body;
+  try {
+    if (usePostgres) {
+      const result = await pool.query(
+        'UPDATE mares SET name = $1, birth_date = $2, last_bred = $3 WHERE id = $4 RETURNING *',
+        [name, birthDate, lastBred || null, mareId]
+      );
+      const mare = result.rows[0];
+      res.json({ id: mare.id, userId: mare.user_id, name: mare.name, birthDate: mare.birth_date, lastBred: mare.last_bred });
+    } else {
+      const idx = db.mares.findIndex(m => m.id === parseInt(mareId));
+      if (idx === -1) return res.status(404).json({ error: 'Mare not found' });
+      db.mares[idx] = { ...db.mares[idx], name, birthDate, lastBred: lastBred || null };
+      saveJsonDb();
+      res.json(db.mares[idx]);
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/mares/:mareId', authMiddleware, async (req, res) => {
+  const { mareId } = req.params;
+  try {
+    if (usePostgres) {
+      await pool.query('DELETE FROM mares WHERE id = $1', [mareId]);
+    } else {
+      db.mares = db.mares.filter(m => m.id !== parseInt(mareId));
+      saveJsonDb();
+    }
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -283,6 +321,44 @@ app.get('/api/stallions', authMiddleware, async (req, res) => {
     } else {
       res.json(db.stallions);
     }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/stallions/:stallionId', authMiddleware, async (req, res) => {
+  const { stallionId } = req.params;
+  const { name, breed } = req.body;
+  try {
+    if (usePostgres) {
+      const result = await pool.query(
+        'UPDATE stallions SET name = $1, breed = $2 WHERE id = $3 RETURNING *',
+        [name, breed || null, stallionId]
+      );
+      const s = result.rows[0];
+      res.json({ id: s.id, name: s.name, breed: s.breed });
+    } else {
+      const idx = db.stallions.findIndex(s => s.id === parseInt(stallionId));
+      if (idx === -1) return res.status(404).json({ error: 'Stallion not found' });
+      db.stallions[idx] = { ...db.stallions[idx], name, breed: breed || null };
+      saveJsonDb();
+      res.json(db.stallions[idx]);
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/stallions/:stallionId', authMiddleware, async (req, res) => {
+  const { stallionId } = req.params;
+  try {
+    if (usePostgres) {
+      await pool.query('DELETE FROM stallions WHERE id = $1', [stallionId]);
+    } else {
+      db.stallions = db.stallions.filter(s => s.id !== parseInt(stallionId));
+      saveJsonDb();
+    }
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
