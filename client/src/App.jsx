@@ -13,7 +13,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route
           path="/"
-          element={isLoggedIn ? <Dashboard /> : <Navigate to="/login" replace />}
+          element={isLoggedIn ? <Navigate to="/calendar" replace /> : <Navigate to="/login" replace />}
         />
         <Route path="/calendar" element={<Calendar />} />
       </Routes>

@@ -5,6 +5,16 @@ import { Link } from 'react-router-dom';
 // Helper to format dates
 const fmtDate = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '');
 
+const REGISTRIES = [
+  'American Quarter Horse Association',
+  'American Paint Horse Association',
+  'Thoroughbred',
+  'Arabian Horse Association',
+  'American Morgan Horse Association',
+  'American Mustang',
+  'Other'
+];
+
 export default function Dashboard() {
   // Data
   const [mares, setMares] = useState([]);
@@ -13,9 +23,9 @@ export default function Dashboard() {
   const [collections, setCollections] = useState([]);
 
   // Form state
-  const [mareForm, setMareForm] = useState({ name: '', birthDate: '', lastBred: '' });
+  const [mareForm, setMareForm] = useState({ registeredName: '', barnName: '', dob: '', registry: '' });
   const [editingMare, setEditingMare] = useState(null);
-  const [stallionForm, setStallionForm] = useState({ name: '', breed: '' });
+  const [stallionForm, setStallionForm] = useState({ registeredName: '', barnName: '', dob: '', registry: '' });
   const [editingStallion, setEditingStallion] = useState(null);
   const [cycleForm, setCycleForm] = useState({ mareId: '', startDate: '', endDate: '' });
   const [collectionForm, setCollectionForm] = useState({
@@ -70,7 +80,7 @@ export default function Dashboard() {
         method: 'POST',
         body: JSON.stringify(mareForm),
       });
-      setMareForm({ name: '', birthDate: '', lastBred: '' });
+      setMareForm({ registeredName: '', barnName: '', dob: '', registry: '' });
       loadMares();
     } catch (e) {
       setError(e.message);
@@ -111,7 +121,7 @@ export default function Dashboard() {
         method: 'POST',
         body: JSON.stringify(stallionForm),
       });
-      setStallionForm({ name: '', breed: '' });
+      setStallionForm({ registeredName: '', barnName: '', dob: '', registry: '' });
       loadStallions();
     } catch (e) {
       setError(e.message);
@@ -209,8 +219,10 @@ export default function Dashboard() {
         <ul>
           {mares.map((m) => (
             <li key={m.id} style={{ marginBottom: '0.5rem' }}>
-              <strong>{m.name}</strong> (Born: {m.birthDate})
-              {m.lastBred && <span> — Last Bred: {m.lastBred}</span>}
+              <strong>{m.registeredName}</strong>
+              {m.barnName && <span> ({m.barnName})</span>}
+              <span> — DOB: {m.dob}</span>
+              {m.registry && <span> — {m.registry}</span>}
               <button style={{ marginLeft: '0.5rem' }} onClick={() => loadCycles(m.id)}>View Cycles</button>
               <button style={{ marginLeft: '0.5rem' }} onClick={() => setEditingMare(m)}>Edit</button>
               <button style={{ marginLeft: '0.5rem', color: 'red' }} onClick={() => handleDeleteMare(m.id)}>Delete</button>
@@ -220,18 +232,26 @@ export default function Dashboard() {
         {editingMare ? (
           <form onSubmit={handleEditMare} style={{ background: '#f5f5f5', padding: '1rem' }}>
             <h4>Edit Mare</h4>
-            <input placeholder="Name" value={editingMare.name} onChange={(e) => setEditingMare({ ...editingMare, name: e.target.value })} required />
-            <input type="date" value={editingMare.birthDate} onChange={(e) => setEditingMare({ ...editingMare, birthDate: e.target.value })} required />
-            <input type="date" placeholder="Last Bred" value={editingMare.lastBred || ''} onChange={(e) => setEditingMare({ ...editingMare, lastBred: e.target.value })} />
+            <input placeholder="Registered Name" value={editingMare.registeredName || ''} onChange={(e) => setEditingMare({ ...editingMare, registeredName: e.target.value })} required />
+            <input placeholder="Barn Name" value={editingMare.barnName || ''} onChange={(e) => setEditingMare({ ...editingMare, barnName: e.target.value })} />
+            <input type="date" value={editingMare.dob || ''} onChange={(e) => setEditingMare({ ...editingMare, dob: e.target.value })} required />
+            <select value={editingMare.registry || ''} onChange={(e) => setEditingMare({ ...editingMare, registry: e.target.value })}>
+              <option value="">Select Registry</option>
+              {REGISTRIES.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
             <button type="submit">Save</button>
             <button type="button" onClick={() => setEditingMare(null)} style={{ marginLeft: '0.5rem' }}>Cancel</button>
           </form>
         ) : (
           <form onSubmit={handleAddMare}>
             <h4>Add Mare</h4>
-            <input placeholder="Name" value={mareForm.name} onChange={(e) => setMareForm({ ...mareForm, name: e.target.value })} required />
-            <input type="date" placeholder="Birth Date" value={mareForm.birthDate} onChange={(e) => setMareForm({ ...mareForm, birthDate: e.target.value })} required />
-            <input type="date" placeholder="Last Bred" value={mareForm.lastBred} onChange={(e) => setMareForm({ ...mareForm, lastBred: e.target.value })} />
+            <input placeholder="Registered Name" value={mareForm.registeredName} onChange={(e) => setMareForm({ ...mareForm, registeredName: e.target.value })} required />
+            <input placeholder="Barn Name (optional)" value={mareForm.barnName} onChange={(e) => setMareForm({ ...mareForm, barnName: e.target.value })} />
+            <input type="date" placeholder="DOB" value={mareForm.dob} onChange={(e) => setMareForm({ ...mareForm, dob: e.target.value })} required />
+            <select value={mareForm.registry} onChange={(e) => setMareForm({ ...mareForm, registry: e.target.value })} required>
+              <option value="">Select Registry</option>
+              {REGISTRIES.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
             <button type="submit">Add Mare</button>
           </form>
         )}
@@ -243,7 +263,10 @@ export default function Dashboard() {
         <ul>
           {stallions.map((s) => (
             <li key={s.id} style={{ marginBottom: '0.5rem' }}>
-              <strong>{s.name}</strong> (Breed: {s.breed || 'Not set'})
+              <strong>{s.registeredName}</strong>
+              {s.barnName && <span> ({s.barnName})</span>}
+              <span> — DOB: {s.dob}</span>
+              {s.registry && <span> — {s.registry}</span>}
               <button style={{ marginLeft: '0.5rem' }} onClick={() => setEditingStallion(s)}>Edit</button>
               <button style={{ marginLeft: '0.5rem', color: 'red' }} onClick={() => handleDeleteStallion(s.id)}>Delete</button>
             </li>
@@ -252,16 +275,26 @@ export default function Dashboard() {
         {editingStallion ? (
           <form onSubmit={handleEditStallion} style={{ background: '#f5f5f5', padding: '1rem' }}>
             <h4>Edit Stallion</h4>
-            <input placeholder="Name" value={editingStallion.name} onChange={(e) => setEditingStallion({ ...editingStallion, name: e.target.value })} required />
-            <input placeholder="Breed" value={editingStallion.breed || ''} onChange={(e) => setEditingStallion({ ...editingStallion, breed: e.target.value })} />
+            <input placeholder="Registered Name" value={editingStallion.registeredName || ''} onChange={(e) => setEditingStallion({ ...editingStallion, registeredName: e.target.value })} required />
+            <input placeholder="Barn Name" value={editingStallion.barnName || ''} onChange={(e) => setEditingStallion({ ...editingStallion, barnName: e.target.value })} />
+            <input type="date" value={editingStallion.dob || ''} onChange={(e) => setEditingStallion({ ...editingStallion, dob: e.target.value })} required />
+            <select value={editingStallion.registry || ''} onChange={(e) => setEditingStallion({ ...editingStallion, registry: e.target.value })}>
+              <option value="">Select Registry</option>
+              {REGISTRIES.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
             <button type="submit">Save</button>
             <button type="button" onClick={() => setEditingStallion(null)} style={{ marginLeft: '0.5rem' }}>Cancel</button>
           </form>
         ) : (
           <form onSubmit={handleAddStallion}>
             <h4>Add Stallion</h4>
-            <input placeholder="Name" value={stallionForm.name} onChange={(e) => setStallionForm({ ...stallionForm, name: e.target.value })} required />
-            <input placeholder="Breed" value={stallionForm.breed} onChange={(e) => setStallionForm({ ...stallionForm, breed: e.target.value })} />
+            <input placeholder="Registered Name" value={stallionForm.registeredName} onChange={(e) => setStallionForm({ ...stallionForm, registeredName: e.target.value })} required />
+            <input placeholder="Barn Name (optional)" value={stallionForm.barnName} onChange={(e) => setStallionForm({ ...stallionForm, barnName: e.target.value })} />
+            <input type="date" placeholder="DOB" value={stallionForm.dob} onChange={(e) => setStallionForm({ ...stallionForm, dob: e.target.value })} required />
+            <select value={stallionForm.registry} onChange={(e) => setStallionForm({ ...stallionForm, registry: e.target.value })} required>
+              <option value="">Select Registry</option>
+              {REGISTRIES.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
             <button type="submit">Add Stallion</button>
           </form>
         )}
@@ -279,7 +312,7 @@ export default function Dashboard() {
             <option value="">Select Mare</option>
             {mares.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.name}
+                {m.registeredName}
               </option>
             ))}
           </select>
@@ -359,7 +392,7 @@ export default function Dashboard() {
             <option value="">Select Stallion</option>
             {stallions.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.name}
+                {s.registeredName}
               </option>
             ))}
           </select>
@@ -372,7 +405,7 @@ export default function Dashboard() {
             <option value="">Select Mare</option>
             {mares.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.name}
+                {m.registeredName}
               </option>
             ))}
           </select>
