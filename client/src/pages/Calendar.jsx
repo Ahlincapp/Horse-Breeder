@@ -13,6 +13,8 @@ const REGISTRIES = [
 ];
 
 export default function Calendar() {
+  const [mares, setMares] = useState([]);
+  const [stallions, setStallions] = useState([]);
   const [events, setEvents] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [error, setError] = useState('');
@@ -20,8 +22,14 @@ export default function Calendar() {
   // Form state
   const [showMareForm, setShowMareForm] = useState(false);
   const [showStallionForm, setShowStallionForm] = useState(false);
+  const [showCycleForm, setShowCycleForm] = useState(false);
   const [mareForm, setMareForm] = useState({ registeredName: '', barnName: '', dob: '', registry: '' });
   const [stallionForm, setStallionForm] = useState({ registeredName: '', barnName: '', dob: '', registry: '' });
+  const [cycleForm, setCycleForm] = useState({ mareId: '', startDate: '', endDate: '' });
+  
+  // Edit state
+  const [editingMare, setEditingMare] = useState(null);
+  const [editingStallion, setEditingStallion] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -29,12 +37,15 @@ export default function Calendar() {
 
   const loadData = async () => {
     try {
-      const stallions = await apiFetch('/api/stallions');
-      const mares = await apiFetch('/api/mares');
+      const stallionsData = await apiFetch('/api/stallions');
+      const maresData = await apiFetch('/api/mares');
+      setStallions(stallionsData);
+      setMares(maresData);
+      
       const allEvents = [];
       const fmt = (d) => d.toISOString().split('T')[0];
 
-      for (const s of stallions) {
+      for (const s of stallionsData) {
         const schedule = await apiFetch(`/api/stallions/${s.id}/schedule`).catch(() => ({ days: [] }));
         const days = schedule.days || [];
         const now = new Date();
@@ -43,7 +54,7 @@ export default function Calendar() {
         for (let d = new Date(now); d <= end; d.setDate(d.getDate() + 1)) {
           if (days.includes(d.getDay())) {
             allEvents.push({
-              title: `${s.barnName || s.registeredName || s.name} collection`,
+              title: `${s.barnName || s.registeredName} collection`,
               start: fmt(d),
               allDay: true,
               backgroundColor: '#4caf50',
@@ -53,12 +64,12 @@ export default function Calendar() {
         }
       }
 
-      for (const m of mares) {
+      for (const m of maresData) {
         const est = await apiFetch(`/api/mares/${m.id}/estimated-cycles?count=6`).catch(() => ({ estimatedCycles: [] }));
         const dates = est.estimatedCycles || [];
         dates.forEach(d => {
           allEvents.push({
-            title: `${m.barnName || m.registeredName || m.name} heat`,
+            title: `${m.barnName || m.registeredName} heat`,
             start: d,
             allDay: true,
             backgroundColor: '#ff9800',
@@ -70,7 +81,7 @@ export default function Calendar() {
         const cycles = await apiFetch(`/api/mares/${m.id}/cycles`).catch(() => []);
         cycles.forEach(c => {
           allEvents.push({
-            title: `${m.barnName || m.registeredName || m.name} cycle`,
+            title: `${m.barnName || m.registeredName} cycle`,
             start: c.startDate,
             end: c.endDate,
             allDay: true,
@@ -86,6 +97,7 @@ export default function Calendar() {
     }
   };
 
+  // Mare handlers
   const handleAddMare = async (e) => {
     e.preventDefault();
     try {
@@ -101,6 +113,31 @@ export default function Calendar() {
     }
   };
 
+  const handleEditMare = async (e) => {
+    e.preventDefault();
+    try {
+      await apiFetch(`/api/mares/${editingMare.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(editingMare),
+      });
+      setEditingMare(null);
+      loadData();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handleDeleteMare = async (id) => {
+    if (!confirm('Delete this mare?')) return;
+    try {
+      await apiFetch(`/api/mares/${id}`, { method: 'DELETE' });
+      loadData();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  // Stallion handlers
   const handleAddStallion = async (e) => {
     e.preventDefault();
     try {
@@ -110,6 +147,46 @@ export default function Calendar() {
       });
       setStallionForm({ registeredName: '', barnName: '', dob: '', registry: '' });
       setShowStallionForm(false);
+      loadData();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handleEditStallion = async (e) => {
+    e.preventDefault();
+    try {
+      await apiFetch(`/api/stallions/${editingStallion.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(editingStallion),
+      });
+      setEditingStallion(null);
+      loadData();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handleDeleteStallion = async (id) => {
+    if (!confirm('Delete this stallion?')) return;
+    try {
+      await apiFetch(`/api/stallions/${id}`, { method: 'DELETE' });
+      loadData();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  // Cycle handlers
+  const handleAddCycle = async (e) => {
+    e.preventDefault();
+    try {
+      await apiFetch(`/api/mares/${cycleForm.mareId}/cycles`, {
+        method: 'POST',
+        body: JSON.stringify({ startDate: cycleForm.startDate, endDate: cycleForm.endDate }),
+      });
+      setCycleForm({ mareId: '', startDate: '', endDate: '' });
+      setShowCycleForm(false);
       loadData();
     } catch (e) {
       setError(e.message);
@@ -141,12 +218,15 @@ export default function Calendar() {
       {error && <p style={{ color: 'red' }}>{error}</p>}
 
       {/* Quick Add Buttons */}
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
         <button onClick={() => setShowMareForm(!showMareForm)}>
           {showMareForm ? '✕ Cancel' : '+ Add Mare'}
         </button>
         <button onClick={() => setShowStallionForm(!showStallionForm)}>
           {showStallionForm ? '✕ Cancel' : '+ Add Stallion'}
+        </button>
+        <button onClick={() => setShowCycleForm(!showCycleForm)}>
+          {showCycleForm ? '✕ Cancel' : '+ Add Heat Cycle'}
         </button>
       </div>
 
@@ -183,6 +263,102 @@ export default function Calendar() {
           <button type="submit" style={{ marginTop: '0.5rem' }}>Add Stallion</button>
         </form>
       )}
+
+      {/* Cycle Form */}
+      {showCycleForm && (
+        <form onSubmit={handleAddCycle} style={{ background: '#fce4ec', padding: '1rem', marginBottom: '1rem' }}>
+          <h4>Add Heat Cycle</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+            <select value={cycleForm.mareId} onChange={e => setCycleForm({ ...cycleForm, mareId: e.target.value })} required>
+              <option value="">Select Mare</option>
+              {mares.map(m => <option key={m.id} value={m.id}>{m.registeredName} {m.barnName && `(${m.barnName})`}</option>)}
+            </select>
+            <input type="date" placeholder="Start Date" value={cycleForm.startDate} onChange={e => setCycleForm({ ...cycleForm, startDate: e.target.value })} required />
+            <input type="date" placeholder="End Date" value={cycleForm.endDate} onChange={e => setCycleForm({ ...cycleForm, endDate: e.target.value })} required />
+          </div>
+          <button type="submit" style={{ marginTop: '0.5rem' }}>Add Cycle</button>
+        </form>
+      )}
+
+      {/* Edit Mare Modal */}
+      {editingMare && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <form onSubmit={handleEditMare} style={{ background: 'white', padding: '2rem', borderRadius: '8px', maxWidth: '500px', width: '90%' }}>
+            <h3>Edit Mare</h3>
+            <div style={{ display: 'grid', gap: '0.5rem' }}>
+              <input placeholder="Registered Name" value={editingMare.registeredName || ''} onChange={e => setEditingMare({ ...editingMare, registeredName: e.target.value })} required />
+              <input placeholder="Barn Name" value={editingMare.barnName || ''} onChange={e => setEditingMare({ ...editingMare, barnName: e.target.value })} />
+              <input type="date" value={editingMare.dob || ''} onChange={e => setEditingMare({ ...editingMare, dob: e.target.value })} required />
+              <select value={editingMare.registry || ''} onChange={e => setEditingMare({ ...editingMare, registry: e.target.value })}>
+                <option value="">Select Registry</option>
+                {REGISTRIES.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+              <button type="submit">Save</button>
+              <button type="button" onClick={() => setEditingMare(null)}>Cancel</button>
+              <button type="button" onClick={() => { handleDeleteMare(editingMare.id); setEditingMare(null); }} style={{ color: 'red', marginLeft: 'auto' }}>Delete</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Edit Stallion Modal */}
+      {editingStallion && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <form onSubmit={handleEditStallion} style={{ background: 'white', padding: '2rem', borderRadius: '8px', maxWidth: '500px', width: '90%' }}>
+            <h3>Edit Stallion</h3>
+            <div style={{ display: 'grid', gap: '0.5rem' }}>
+              <input placeholder="Registered Name" value={editingStallion.registeredName || ''} onChange={e => setEditingStallion({ ...editingStallion, registeredName: e.target.value })} required />
+              <input placeholder="Barn Name" value={editingStallion.barnName || ''} onChange={e => setEditingStallion({ ...editingStallion, barnName: e.target.value })} />
+              <input type="date" value={editingStallion.dob || ''} onChange={e => setEditingStallion({ ...editingStallion, dob: e.target.value })} required />
+              <select value={editingStallion.registry || ''} onChange={e => setEditingStallion({ ...editingStallion, registry: e.target.value })}>
+                <option value="">Select Registry</option>
+                {REGISTRIES.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+              <button type="submit">Save</button>
+              <button type="button" onClick={() => setEditingStallion(null)}>Cancel</button>
+              <button type="button" onClick={() => { handleDeleteStallion(editingStallion.id); setEditingStallion(null); }} style={{ color: 'red', marginLeft: 'auto' }}>Delete</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Mares & Stallions List */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+        <div style={{ background: '#f5f5f5', padding: '1rem' }}>
+          <h3>Mares</h3>
+          {mares.length === 0 ? <p>No mares added yet</p> : (
+            <ul style={{ listStyle: 'none', padding: 0 }}>
+              {mares.map(m => (
+                <li key={m.id} style={{ marginBottom: '0.5rem', padding: '0.5rem', background: 'white', borderRadius: '4px' }}>
+                  <strong>{m.registeredName}</strong>
+                  {m.barnName && <span> ({m.barnName})</span>}
+                  <br /><small>{m.registry} • DOB: {m.dob}</small>
+                  <br /><button onClick={() => setEditingMare(m)} style={{ marginTop: '0.25rem' }}>Edit / Delete</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div style={{ background: '#f5f5f5', padding: '1rem' }}>
+          <h3>Stallions</h3>
+          {stallions.length === 0 ? <p>No stallions added yet</p> : (
+            <ul style={{ listStyle: 'none', padding: 0 }}>
+              {stallions.map(s => (
+                <li key={s.id} style={{ marginBottom: '0.5rem', padding: '0.5rem', background: 'white', borderRadius: '4px' }}>
+                  <strong>{s.registeredName}</strong>
+                  {s.barnName && <span> ({s.barnName})</span>}
+                  <br /><small>{s.registry} • DOB: {s.dob}</small>
+                  <br /><button onClick={() => setEditingStallion(s)} style={{ marginTop: '0.25rem' }}>Edit / Delete</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
 
       {/* Calendar Grid */}
       <div style={{ border: '2px solid #333', borderRadius: '8px', overflow: 'hidden' }}>
@@ -229,7 +405,7 @@ export default function Calendar() {
       </div>
 
       {/* Legend */}
-      <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem', fontSize: '0.85rem' }}>
+      <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem', fontSize: '0.85rem', flexWrap: 'wrap' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <span style={{ width: '12px', height: '12px', background: '#4caf50', borderRadius: '2px' }}></span> Stallion Collection
         </span>
