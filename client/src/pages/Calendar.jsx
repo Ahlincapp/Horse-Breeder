@@ -23,9 +23,14 @@ export default function Calendar() {
   const [showMareForm, setShowMareForm] = useState(false);
   const [showStallionForm, setShowStallionForm] = useState(false);
   const [showCycleForm, setShowCycleForm] = useState(false);
+  const [showBreedingForm, setShowBreedingForm] = useState(false);
+  const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [mareForm, setMareForm] = useState({ registeredName: '', barnName: '', dob: '', registry: '' });
+  const [breedingForm, setBreedingForm] = useState({ breedDate: '', confirmedInFoal: '', gestationDate: '' });
+  const [breedingMareId, setBreedingMareId] = useState(null);
   const [stallionForm, setStallionForm] = useState({ registeredName: '', barnName: '', dob: '', registry: '' });
   const [cycleForm, setCycleForm] = useState({ mareId: '', startDate: '', endDate: '' });
+  const [scheduleForm, setScheduleForm] = useState({ stallionId: '', days: [] });
   
   // Edit state
   const [editingMare, setEditingMare] = useState(null);
@@ -89,6 +94,36 @@ export default function Calendar() {
             borderColor: '#c2185b',
           });
         });
+
+        // Add breeding info
+        const breeding = await apiFetch(`/api/mares/${m.id}/breeding`).catch(() => ({}));
+        if (breeding.breedDate) {
+          allEvents.push({
+            title: `${m.barnName || m.registeredName} bred`,
+            start: breeding.breedDate,
+            allDay: true,
+            backgroundColor: '#2196f3',
+            borderColor: '#1976d2',
+          });
+        }
+        if (breeding.gestationDate) {
+          allEvents.push({
+            title: `${m.barnName || m.registeredName} due (foal)`,
+            start: breeding.gestationDate,
+            allDay: true,
+            backgroundColor: '#9c27b0',
+            borderColor: '#7b1fa2',
+          });
+        }
+        if (breeding.confirmedInFoal) {
+          allEvents.push({
+            title: `${m.barnName || m.registeredName} in foal confirmed`,
+            start: breeding.confirmedInFoal,
+            allDay: true,
+            backgroundColor: '#00bcd4',
+            borderColor: '#0097a7',
+          });
+        }
       }
 
       setEvents(allEvents);
@@ -101,12 +136,36 @@ export default function Calendar() {
   const handleAddMare = async (e) => {
     e.preventDefault();
     try {
-      await apiFetch('/api/mares', {
+      const mare = await apiFetch('/api/mares', {
         method: 'POST',
         body: JSON.stringify(mareForm),
       });
+      // Save breeding info if provided
+      if (breedingForm.breedDate || breedingForm.confirmedInFoal || breedingForm.gestationDate) {
+        await apiFetch(`/api/mares/${mare.id}/breeding`, {
+          method: 'PUT',
+          body: JSON.stringify(breedingForm),
+        });
+      }
       setMareForm({ registeredName: '', barnName: '', dob: '', registry: '' });
+      setBreedingForm({ breedDate: '', confirmedInFoal: '', gestationDate: '' });
       setShowMareForm(false);
+      loadData();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handleAddBreeding = async (e) => {
+    e.preventDefault();
+    try {
+      await apiFetch(`/api/mares/${breedingMareId}/breeding`, {
+        method: 'PUT',
+        body: JSON.stringify(breedingForm),
+      });
+      setShowBreedingForm(false);
+      setBreedingMareId(null);
+      setBreedingForm({ breedDate: '', confirmedInFoal: '', gestationDate: '' });
       loadData();
     } catch (e) {
       setError(e.message);
@@ -120,7 +179,34 @@ export default function Calendar() {
         method: 'PUT',
         body: JSON.stringify(editingMare),
       });
+      // Save breeding info if provided
+      if (editingMare.breedDate || editingMare.confirmedInFoal || editingMare.gestationDate) {
+        await apiFetch(`/api/mares/${editingMare.id}/breeding`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            breedDate: editingMare.breedDate,
+            confirmedInFoal: editingMare.confirmedInFoal,
+            gestationDate: editingMare.gestationDate,
+          }),
+        });
+      }
       setEditingMare(null);
+      loadData();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  // Stallion schedule handler
+  const handleSetSchedule = async (e) => {
+    e.preventDefault();
+    try {
+      await apiFetch(`/api/stallions/${scheduleForm.stallionId}/schedule`, {
+        method: 'PUT',
+        body: JSON.stringify({ days: scheduleForm.days }),
+      });
+      setShowScheduleForm(false);
+      setScheduleForm({ stallionId: '', days: [] });
       loadData();
     } catch (e) {
       setError(e.message);
@@ -243,6 +329,12 @@ export default function Calendar() {
               {REGISTRIES.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
+          <h4 style={{ marginTop: '1rem' }}>Breeding Info (Optional)</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+            <input type="date" placeholder="Breed Date" value={breedingForm.breedDate} onChange={e => setBreedingForm({ ...breedingForm, breedDate: e.target.value })} />
+            <input type="date" placeholder="Confirmed In Foal" value={breedingForm.confirmedInFoal} onChange={e => setBreedingForm({ ...breedingForm, confirmedInFoal: e.target.value })} />
+            <input type="date" placeholder="Gestation Due Date" value={breedingForm.gestationDate} onChange={e => setBreedingForm({ ...breedingForm, gestationDate: e.target.value })} />
+          </div>
           <button type="submit" style={{ marginTop: '0.5rem' }}>Add Mare</button>
         </form>
       )}
@@ -279,6 +371,49 @@ export default function Calendar() {
           <button type="submit" style={{ marginTop: '0.5rem' }}>Add Cycle</button>
         </form>
       )}
+
+      {/* Breeding Info Form */}
+      {showBreedingForm && (
+        <form onSubmit={handleAddBreeding} style={{ background: '#e3f2fd', padding: '1rem', marginBottom: '1rem' }}>
+          <h4>Set Breeding Info</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+            <input type="date" placeholder="Breed Date" value={breedingForm.breedDate} onChange={e => setBreedingForm({ ...breedingForm, breedDate: e.target.value })} />
+            <input type="date" placeholder="Confirmed In Foal" value={breedingForm.confirmedInFoal} onChange={e => setBreedingForm({ ...breedingForm, confirmedInFoal: e.target.value })} />
+            <input type="date" placeholder="Gestation Due Date" value={breedingForm.gestationDate} onChange={e => setBreedingForm({ ...breedingForm, gestationDate: e.target.value })} />
+          </div>
+          <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
+            <button type="submit">Save Breeding Info</button>
+            <button type="button" onClick={() => { setShowBreedingForm(false); setBreedingMareId(null); }}>Cancel</button>
+          </div>
+        </form>
+      )}
+
+      {/* Stallion Schedule Form */}
+      {showScheduleForm && (
+        <form onSubmit={handleSetSchedule} style={{ background: '#e8f5e9', padding: '1rem', marginBottom: '1rem' }}>
+          <h4>Set Collection Days</h4>
+          <p>Select days of the week for semen collection:</p>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
+              <label key={day} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', background: scheduleForm.days.includes(idx) ? '#4caf50' : '#fff', borderRadius: '4px', border: '1px solid #ccc' }}>
+                <input type="checkbox" checked={scheduleForm.days.includes(idx)} onChange={e => {
+                  if (e.target.checked) {
+                    setScheduleForm({ ...scheduleForm, days: [...scheduleForm.days, idx] });
+                  } else {
+                    setScheduleForm({ ...scheduleForm, days: scheduleForm.days.filter(d => d !== idx) });
+                  }
+                }} />
+                {day}
+              </label>
+            ))}
+          </div>
+          <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
+            <button type="submit">Save Schedule</button>
+            <button type="button" onClick={() => { setShowScheduleForm(false); setScheduleForm({ stallionId: '', days: [] }); }}>Cancel</button>
+          </div>
+        </form>
+      )}
+
 
       {/* Edit Mare Modal */}
       {editingMare && (
@@ -337,7 +472,16 @@ export default function Calendar() {
                   <strong>{m.registeredName}</strong>
                   {m.barnName && <span> ({m.barnName})</span>}
                   <br /><small>{m.registry} • DOB: {m.dob}</small>
-                  <br /><button onClick={() => setEditingMare(m)} style={{ marginTop: '0.25rem' }}>Edit / Delete</button>
+                  <div style={{ marginTop: '0.25rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button onClick={() => setEditingMare(m)}>Edit</button>
+                    <button onClick={async () => {
+                      const breeding = await apiFetch(`/api/mares/${m.id}/breeding`).catch(() => ({}));
+                      setBreedingForm({ breedDate: breeding.breedDate || '', confirmedInFoal: breeding.confirmedInFoal || '', gestationDate: breeding.gestationDate || '' });
+                      setBreedingMareId(m.id);
+                      setShowBreedingForm(true);
+                    }}>Breeding Info</button>
+                    <button onClick={() => handleDeleteMare(m.id)} style={{ color: 'red' }}>Delete</button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -352,7 +496,11 @@ export default function Calendar() {
                   <strong>{s.registeredName}</strong>
                   {s.barnName && <span> ({s.barnName})</span>}
                   <br /><small>{s.registry} • DOB: {s.dob}</small>
-                  <br /><button onClick={() => setEditingStallion(s)} style={{ marginTop: '0.25rem' }}>Edit / Delete</button>
+                  <div style={{ marginTop: '0.25rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button onClick={() => setEditingStallion(s)}>Edit</button>
+                    <button onClick={() => { setScheduleForm({ stallionId: s.id, days: [] }); setShowScheduleForm(true); }}>Set Collection Days</button>
+                    <button onClick={() => handleDeleteStallion(s.id)} style={{ color: 'red' }}>Delete</button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -414,6 +562,15 @@ export default function Calendar() {
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <span style={{ width: '12px', height: '12px', background: '#e91e63', borderRadius: '2px' }}></span> Cycle
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ width: '12px', height: '12px', background: '#2196f3', borderRadius: '2px' }}></span> Bred
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ width: '12px', height: '12px', background: '#00bcd4', borderRadius: '2px' }}></span> In Foal Confirmed
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ width: '12px', height: '12px', background: '#9c27b0', borderRadius: '2px' }}></span> Due (Foal)
         </span>
       </div>
     </div>

@@ -78,6 +78,20 @@ async function initDb() {
           method VARCHAR(50),
           created_at TIMESTAMP DEFAULT NOW()
         );
+        CREATE TABLE IF NOT EXISTS mare_breeding (
+          id SERIAL PRIMARY KEY,
+          mare_id INTEGER UNIQUE REFERENCES mares(id),
+          breed_date DATE,
+          confirmed_in_foal DATE,
+          gestation_date DATE,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS stallion_schedule (
+          id SERIAL PRIMARY KEY,
+          stallion_id INTEGER UNIQUE REFERENCES stallions(id),
+          collection_days INTEGER[],
+          created_at TIMESTAMP DEFAULT NOW()
+        );
       `);
       console.log('✅ PostgreSQL database initialized');
     } finally {
@@ -85,6 +99,9 @@ async function initDb() {
     }
   } else {
     loadJsonDb();
+    // Ensure new collections exist in JSON file
+    if (!db.mare_breeding) db.mare_breeding = [];
+    if (!db.stallion_schedule) db.stallion_schedule = [];
     console.log('✅ JSON file database initialized');
   }
 }
@@ -234,6 +251,185 @@ app.put('/api/mares/:mareId', authMiddleware, async (req, res) => {
       saveJsonDb();
       res.json(db.mares[idx]);
     }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Mare breeding info endpoints
+app.get('/api/mares/:mareId/breeding', authMiddleware, async (req, res) => {
+  const { mareId } = req.params;
+  try {
+    if (usePostgres) {
+      const result = await pool.query('SELECT * FROM mare_breeding WHERE mare_id = $1', [mareId]);
+      if (result.rows.length === 0) {
+        res.json({ mareId: parseInt(mareId), breedDate: null, confirmedInFoal: null, gestationDate: null });
+      } else {
+        const b = result.rows[0];
+        res.json({ mareId: b.mare_id, breedDate: b.breed_date, confirmedInFoal: b.confirmed_in_foal, gestationDate: b.gestation_date });
+      }
+    } else {
+      const breeding = db.mare_breeding.find(b => b.mareId === parseInt(mareId));
+      res.json(breeding || { mareId: parseInt(mareId), breedDate: null, confirmedInFoal: null, gestationDate: null });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/mares/:mareId/breeding', authMiddleware, async (req, res) => {
+  const { mareId } = req.params;
+  const { breedDate, confirmedInFoal, gestationDate } = req.body;
+  try {
+    if (usePostgres) {
+      await pool.query(
+        `INSERT INTO mare_breeding (mare_id, breed_date, confirmed_in_foal, gestation_date)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (mare_id) DO UPDATE SET
+         breed_date = $2, confirmed_in_foal = $3, gestation_date = $4`,
+        [mareId, breedDate || null, confirmedInFoal || null, gestationDate || null]
+      );
+      res.json({ mareId: parseInt(mareId), breedDate, confirmedInFoal, gestationDate });
+    } else {
+      const idx = db.mare_breeding.findIndex(b => b.mareId === parseInt(mareId));
+      const breeding = { mareId: parseInt(mareId), breedDate, confirmedInFoal, gestationDate };
+      if (idx >= 0) {
+        db.mare_breeding[idx] = breeding;
+      } else {
+        db.mare_breeding.push(breeding);
+      }
+      saveJsonDb();
+      res.json(breeding);
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Estimated cycles based on breed averages
+const BREED_CYCLE_LENGTHS = {
+  'American Quarter Horse Association': 21,
+  'American Paint Horse Association': 21,
+  'Thoroughbred': 21,
+  'Arabian Horse Association': 22,
+  'American Morgan Horse Association': 21,
+  'American Mustang': 22,
+  'Other': 21,
+  'default': 21
+};
+
+app.get('/api/mares/:mareId/estimated-cycles', authMiddleware, async (req, res) => {
+  const { mareId } = req.params;
+  const { count = 6 } = req.query;
+  try {
+    let mare, cycles;
+    if (usePostgres) {
+      const mareResult = await pool.query('SELECT * FROM mares WHERE id = $1', [mareId]);
+      const cycleResult = await pool.query('SELECT * FROM cycles WHERE mare_id = $1 ORDER BY start_date DESC', [mareId]);
+      mare = mareResult.rows[0];
+      cycles = cycleResult.rows;
+    } else {
+      mare = db.mares.find(m => m.id === parseInt(mareId));
+      cycles = db.cycles.filter(c => c.mareId === parseInt(mareId)).sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+    }
+    
+    if (!mare) return res.status(404).json({ error: 'Mare not found' });
+    
+    const cycleLength = BREED_CYCLE_LENGTHS[mare.registry] || BREED_CYCLE_LENGTHS['default'];
+    const estimatedCycles = [];
+    
+    // Start from the last actual cycle, or use lastBred date, or default to today
+    let lastDate;
+    if (cycles.length > 0) {
+      lastDate = new Date(cycles[0].start_date);
+    } else {
+      // Check breeding info
+      let breeding;
+      if (usePostgres) {
+        const bResult = await pool.query('SELECT breed_date FROM mare_breeding WHERE mare_id = $1', [mareId]);
+        breeding = bResult.rows[0];
+      } else {
+        breeding = db.mare_breeding.find(b => b.mareId === parseInt(mareId));
+      }
+      if (breeding && breeding.breedDate) {
+        lastDate = new Date(breeding.breedDate);
+      } else {
+        lastDate = new Date();
+      }
+    }
+    
+    // Generate future cycles
+    for (let i = 0; i < parseInt(count); i++) {
+      const cycleDate = new Date(lastDate);
+      cycleDate.setDate(cycleDate.getDate() + (i * cycleLength));
+      estimatedCycles.push(cycleDate.toISOString().split('T')[0]);
+    }
+    
+    res.json({ estimatedCycles, cycleLength });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Auto-generate cycles from estimated
+app.post('/api/mares/:mareId/auto-cycles', authMiddleware, async (req, res) => {
+  const { mareId } = req.params;
+  const { count = 6 } = req.body;
+  try {
+    let mare;
+    if (usePostgres) {
+      const result = await pool.query('SELECT * FROM mares WHERE id = $1', [mareId]);
+      mare = result.rows[0];
+    } else {
+      mare = db.mares.find(m => m.id === parseInt(mareId));
+    }
+    
+    if (!mare) return res.status(404).json({ error: 'Mare not found' });
+    
+    const cycleLength = BREED_CYCLE_LENGTHS[mare.registry] || BREED_CYCLE_LENGTHS['default'];
+    const heatDuration = 7; // 7 days heat
+    let lastDate = new Date();
+    
+    // Find last actual cycle to start from
+    let cycles;
+    if (usePostgres) {
+      const cycleResult = await pool.query('SELECT start_date FROM cycles WHERE mare_id = $1 ORDER BY start_date DESC LIMIT 1', [mareId]);
+      cycles = cycleResult.rows;
+    } else {
+      cycles = db.cycles.filter(c => c.mareId === parseInt(mareId)).sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+    }
+    
+    if (cycles.length > 0) {
+      lastDate = new Date(cycles[0].start_date);
+    }
+    
+    const newCycles = [];
+    for (let i = 0; i < count; i++) {
+      const startDate = new Date(lastDate);
+      startDate.setDate(startDate.getDate() + (i * cycleLength));
+      const endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + heatDuration);
+      
+      const cycle = {
+        startDate: startDate.toISOString().split('T')[0],
+        endDate: endDate.toISOString().split('T')[0]
+      };
+      
+      if (usePostgres) {
+        const result = await pool.query(
+          'INSERT INTO cycles (mare_id, start_date, end_date) VALUES ($1, $2, $3) RETURNING *',
+          [mareId, cycle.startDate, cycle.endDate]
+        );
+        newCycles.push(result.rows[0]);
+      } else {
+        const newCycle = { id: Date.now() + i, mareId: parseInt(mareId), startDate: cycle.startDate, endDate: cycle.endDate, created_at: new Date().toISOString() };
+        db.cycles.push(newCycle);
+        newCycles.push(newCycle);
+      }
+    }
+    
+    if (!usePostgres) saveJsonDb();
+    res.json({ success: true, cycles: newCycles });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -395,6 +591,87 @@ app.get('/api/stallions/:id/report', authMiddleware, async (req, res) => {
     } else {
       const collections = db.collections.filter(c => c.stallionId === parseInt(stallionId));
       res.json({ stallionId, collections });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Stallion schedule (collection days)
+app.get('/api/stallions/:stallionId/schedule', authMiddleware, async (req, res) => {
+  const { stallionId } = req.params;
+  try {
+    if (usePostgres) {
+      const result = await pool.query('SELECT * FROM stallion_schedule WHERE stallion_id = $1', [stallionId]);
+      if (result.rows.length === 0) {
+        res.json({ stallionId: parseInt(stallionId), days: [] });
+      } else {
+        res.json({ stallionId: result.rows[0].stallion_id, days: result.rows[0].collection_days || [] });
+      }
+    } else {
+      const schedule = db.stallion_schedule.find(s => s.stallionId === parseInt(stallionId));
+      res.json(schedule || { stallionId: parseInt(stallionId), days: [] });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/stallions/:stallionId/schedule', authMiddleware, async (req, res) => {
+  const { stallionId } = req.params;
+  const { days } = req.body; // Array of weekday numbers 0-6 (Sun-Sat)
+  try {
+    if (usePostgres) {
+      await pool.query(
+        `INSERT INTO stallion_schedule (stallion_id, collection_days)
+         VALUES ($1, $2)
+         ON CONFLICT (stallion_id) DO UPDATE SET collection_days = $2`,
+        [stallionId, days || []]
+      );
+      res.json({ stallionId: parseInt(stallionId), days: days || [] });
+    } else {
+      const idx = db.stallion_schedule.findIndex(s => s.stallionId === parseInt(stallionId));
+      const schedule = { stallionId: parseInt(stallionId), days: days || [] };
+      if (idx >= 0) {
+        db.stallion_schedule[idx] = schedule;
+      } else {
+        db.stallion_schedule.push(schedule);
+      }
+      saveJsonDb();
+      res.json(schedule);
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all collections for calendar
+app.get('/api/collections', authMiddleware, async (req, res) => {
+  try {
+    if (usePostgres) {
+      const result = await pool.query(`
+        SELECT c.id, c.stallion_id, c.mare_id, c.date, c.method, c.cycle_id,
+               s.registered_name as stallion_name, s.barn_name as stallion_barn,
+               m.registered_name as mare_name, m.barn_name as mare_barn
+        FROM collections c
+        LEFT JOIN stallions s ON c.stallion_id = s.id
+        LEFT JOIN mares m ON c.mare_id = m.id
+        ORDER BY c.date DESC
+      `);
+      res.json(result.rows);
+    } else {
+      const collections = db.collections.map(c => {
+        const stallion = db.stallions.find(s => s.id === c.stallionId);
+        const mare = db.mares.find(m => m.id === c.mareId);
+        return {
+          ...c,
+          stallion_name: stallion?.registeredName,
+          stallion_barn: stallion?.barnName,
+          mare_name: mare?.registeredName,
+          mare_barn: mare?.barnName
+        };
+      });
+      res.json(collections);
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
