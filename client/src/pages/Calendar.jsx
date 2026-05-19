@@ -70,17 +70,24 @@ export default function Calendar() {
       }
 
       for (const m of maresData) {
-        const est = await apiFetch(`/api/mares/${m.id}/estimated-cycles?count=6`).catch(() => ({ estimatedCycles: [] }));
-        const dates = est.estimatedCycles || [];
-        dates.forEach(d => {
-          allEvents.push({
-            title: `${m.barnName || m.registeredName} heat`,
-            start: d,
-            allDay: true,
-            backgroundColor: '#ff9800',
-            borderColor: '#f57c00',
+        // Get breeding info first to check if pregnant
+        const breeding = await apiFetch(`/api/mares/${m.id}/breeding`).catch(() => ({}));
+        const isPregnant = !!breeding.confirmedInFoal;
+        
+        // Only show estimated heat cycles if NOT pregnant
+        if (!isPregnant) {
+          const est = await apiFetch(`/api/mares/${m.id}/estimated-cycles?count=26`).catch(() => ({ estimatedCycles: [] }));
+          const dates = est.estimatedCycles || [];
+          dates.forEach(d => {
+            allEvents.push({
+              title: `${m.barnName || m.registeredName} heat`,
+              start: d,
+              allDay: true,
+              backgroundColor: '#ff9800',
+              borderColor: '#f57c00',
+            });
           });
-        });
+        }
         
         // Add actual cycles
         const cycles = await apiFetch(`/api/mares/${m.id}/cycles`).catch(() => []);
@@ -95,8 +102,7 @@ export default function Calendar() {
           });
         });
 
-        // Add breeding info
-        const breeding = await apiFetch(`/api/mares/${m.id}/breeding`).catch(() => ({}));
+        // Add breeding info (multiple breed dates - show all past breedings)
         if (breeding.breedDate) {
           allEvents.push({
             title: `${m.barnName || m.registeredName} bred`,

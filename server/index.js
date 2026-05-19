@@ -281,18 +281,42 @@ app.put('/api/mares/:mareId/breeding', authMiddleware, async (req, res) => {
   const { mareId } = req.params;
   const { breedDate, confirmedInFoal, gestationDate } = req.body;
   try {
+    // Get mare's registry to calculate gestation period
+    let mare;
+    if (usePostgres) {
+      const mResult = await pool.query('SELECT registry FROM mares WHERE id = $1', [mareId]);
+      mare = mResult.rows[0];
+    } else {
+      mare = db.mares.find(m => m.id === parseInt(mareId));
+    }
+    
+    const gestationPeriod = BREED_GESTATION_PERIODS[mare?.registry] || BREED_GESTATION_PERIODS['default'];
+    
+    // Auto-calculate gestation date if confirmedInFoal is set but gestationDate is not
+    let autoGestationDate = gestationDate;
+    if (confirmedInFoal && !gestationDate && breedDate) {
+      const bd = new Date(breedDate);
+      bd.setDate(bd.getDate() + gestationPeriod);
+      autoGestationDate = bd.toISOString().split('T')[0];
+    } else if (confirmedInFoal && !gestationDate && !breedDate) {
+      // Use confirmedInFoal date as the breeding reference point
+      const cf = new Date(confirmedInFoal);
+      cf.setDate(cf.getDate() + gestationPeriod);
+      autoGestationDate = cf.toISOString().split('T')[0];
+    }
+    
     if (usePostgres) {
       await pool.query(
         `INSERT INTO mare_breeding (mare_id, breed_date, confirmed_in_foal, gestation_date)
          VALUES ($1, $2, $3, $4)
          ON CONFLICT (mare_id) DO UPDATE SET
          breed_date = $2, confirmed_in_foal = $3, gestation_date = $4`,
-        [mareId, breedDate || null, confirmedInFoal || null, gestationDate || null]
+        [mareId, breedDate || null, confirmedInFoal || null, autoGestationDate || null]
       );
-      res.json({ mareId: parseInt(mareId), breedDate, confirmedInFoal, gestationDate });
+      res.json({ mareId: parseInt(mareId), breedDate, confirmedInFoal, gestationDate: autoGestationDate });
     } else {
       const idx = db.mare_breeding.findIndex(b => b.mareId === parseInt(mareId));
-      const breeding = { mareId: parseInt(mareId), breedDate, confirmedInFoal, gestationDate };
+      const breeding = { mareId: parseInt(mareId), breedDate, confirmedInFoal, gestationDate: autoGestationDate };
       if (idx >= 0) {
         db.mare_breeding[idx] = breeding;
       } else {
@@ -306,7 +330,7 @@ app.put('/api/mares/:mareId/breeding', authMiddleware, async (req, res) => {
   }
 });
 
-// Estimated cycles based on breed averages
+// Estimated cycles and gestation based on breed averages
 const BREED_CYCLE_LENGTHS = {
   'American Quarter Horse Association': 21,
   'American Paint Horse Association': 21,
@@ -318,9 +342,20 @@ const BREED_CYCLE_LENGTHS = {
   'default': 21
 };
 
+const BREED_GESTATION_PERIODS = {
+  'American Quarter Horse Association': 340,
+  'American Paint Horse Association': 340,
+  'Thoroughbred': 340,
+  'Arabian Horse Association': 335,
+  'American Morgan Horse Association': 340,
+  'American Mustang': 335,
+  'Other': 340,
+  'default': 340
+};
+
 app.get('/api/mares/:mareId/estimated-cycles', authMiddleware, async (req, res) => {
   const { mareId } = req.params;
-  const { count = 6 } = req.query;
+  const { count = 26 } = req.query; // Default to ~6 months worth (26 cycles of ~21 days)
   try {
     let mare, cycles;
     if (usePostgres) {
@@ -338,18 +373,20 @@ app.get('/api/mares/:mareId/estimated-cycles', authMiddleware, async (req, res) 
     const cycleLength = BREED_CYCLE_LENGTHS[mare.registry] || BREED_CYCLE_LENGTHS['default'];
     const estimatedCycles = [];
     
-    // Start from the last actual cycle, or use lastBred date, or default to today
+    // Start from the last actual cycle, or use last breed date, or default to today
     let lastDate;
     if (cycles.length > 0) {
+      // Use the most recent actual cycle as base
       lastDate = new Date(cycles[0].start_date);
     } else {
-      // Check breeding info
+      // Check breeding info for most recent breed date
       let breeding;
       if (usePostgres) {
-        const bResult = await pool.query('SELECT breed_date FROM mare_breeding WHERE mare_id = $1', [mareId]);
+        const bResult = await pool.query('SELECT breed_date FROM mare_breeding WHERE mare_id = $1 AND breed_date IS NOT NULL ORDER BY breed_date DESC LIMIT 1', [mareId]);
         breeding = bResult.rows[0];
       } else {
-        breeding = db.mare_breeding.find(b => b.mareId === parseInt(mareId));
+        const breedingList = db.mare_breeding.filter(b => b.mareId === parseInt(mareId) && b.breedDate).sort((a, b) => new Date(b.breedDate) - new Date(a.breedDate));
+        breeding = breedingList[0];
       }
       if (breeding && breeding.breedDate) {
         lastDate = new Date(breeding.breedDate);
@@ -358,11 +395,15 @@ app.get('/api/mares/:mareId/estimated-cycles', authMiddleware, async (req, res) 
       }
     }
     
-    // Generate future cycles
-    for (let i = 0; i < parseInt(count); i++) {
+    // Generate future cycles (starting from next cycle after the last one)
+    const numCycles = Math.min(parseInt(count), 30); // Cap at 30 to avoid too many
+    for (let i = 1; i <= numCycles; i++) {
       const cycleDate = new Date(lastDate);
       cycleDate.setDate(cycleDate.getDate() + (i * cycleLength));
-      estimatedCycles.push(cycleDate.toISOString().split('T')[0]);
+      // Only include future dates
+      if (cycleDate > new Date()) {
+        estimatedCycles.push(cycleDate.toISOString().split('T')[0]);
+      }
     }
     
     res.json({ estimatedCycles, cycleLength });
