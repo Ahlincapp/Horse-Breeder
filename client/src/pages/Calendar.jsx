@@ -571,16 +571,30 @@ export default function Calendar() {
                       setShowBreedingForm(true);
                     }}>Breeding Info</button>
                     <button onClick={async () => {
-                      const today = new Date().toISOString().split('T')[0];
-                      const confirmed = confirm('Confirm this mare is in foal? This will hide heat cycle projections.');
-                      if (confirmed) {
+                      // Fetch current breeding info to see if already confirmed
+                      const breeding = await apiFetch(`/api/mares/${m.id}/breeding`).catch(() => ({}));
+                      const currentConfirmed = breeding.confirmedInFoal || '';
+                      const date = prompt('Enter confirmation date (YYYY-MM-DD) or leave empty to clear:', currentConfirmed || new Date().toISOString().split('T')[0]);
+                      if (date === null) return; // Cancelled
+                      const trimmed = date.trim();
+                      if (trimmed === '') {
+                        // Clear confirmed in foal (mare lost foal)
+                        if (confirm('Clear confirmed in foal? This will resume heat cycle projections.')) {
+                          await apiFetch(`/api/mares/${m.id}/breeding`, {
+                            method: 'PUT',
+                            body: JSON.stringify({ confirmedInFoal: '' }),
+                          });
+                          loadData();
+                        }
+                      } else {
+                        // Set confirmed in foal date
                         await apiFetch(`/api/mares/${m.id}/breeding`, {
                           method: 'PUT',
-                          body: JSON.stringify({ confirmedInFoal: today }),
+                          body: JSON.stringify({ confirmedInFoal: trimmed }),
                         });
                         loadData();
                       }
-                    }} style={{ background: '#00bcd4', color: 'white', border: 'none' }}>Confirm In Foal</button>
+                    }} style={{ background: '#00bcd4', color: 'white', border: 'none' }}>{breeding?.confirmedInFoal ? 'Edit In Foal' : 'Confirm In Foal'}</button>
                     <button onClick={() => handleDeleteMare(m.id)} style={{ color: 'red' }}>Delete</button>
                   </div>
                 </li>

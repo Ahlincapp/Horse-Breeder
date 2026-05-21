@@ -428,18 +428,22 @@ app.get('/api/mares/:mareId/estimated-cycles', authMiddleware, async (req, res) 
       return res.json({ estimatedCycles, cycleLength });
     }
     
-    // Start from the last actual cycle, or use last breed date, or default to today
+    // Only generate estimated cycles if there's at least one actual cycle OR breed date
+    // (Per memory: "After entering a heat cycle, calendar projects...")
+    const breedDates = breeding?.breedDates || [];
+    if (cycles.length === 0 && breedDates.length === 0) {
+      // No actual cycles or breed dates - don't show estimated cycles yet
+      return res.json({ estimatedCycles, cycleLength });
+    }
+    
+    // Start from the last actual cycle, or use last breed date
     let lastDate;
     if (cycles.length > 0) {
       // Use the most recent actual cycle as base
       lastDate = new Date(cycles[0].start_date);
     } else {
-      const breedDates = breeding?.breedDates || [];
-      if (breedDates.length > 0) {
-        lastDate = new Date(breedDates[breedDates.length - 1]); // Use most recent
-      } else {
-        lastDate = new Date();
-      }
+      // Use most recent breed date
+      lastDate = new Date(breedDates[breedDates.length - 1]);
     }
     
     // Generate future cycles (starting from next cycle after the last one)
