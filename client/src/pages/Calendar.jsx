@@ -430,9 +430,23 @@ export default function Calendar() {
           )}
           {/* Add new breed date */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
-            <input type="date" placeholder="Add Breed Date" value={breedingForm.breedDate} onChange={e => setBreedingForm({ ...breedingForm, breedDate: e.target.value })} />
-            <input type="date" placeholder="Confirmed In Foal" value={breedingForm.confirmedInFoal} onChange={e => setBreedingForm({ ...breedingForm, confirmedInFoal: e.target.value })} />
-            <input type="date" placeholder="Gestation Due Date" value={breedingForm.gestationDate} onChange={e => setBreedingForm({ ...breedingForm, gestationDate: e.target.value })} />
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem' }}>Add Breed Date</label>
+              <input type="date" style={{ width: '100%' }} value={breedingForm.breedDate} onChange={e => setBreedingForm({ ...breedingForm, breedDate: e.target.value })} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem' }}>Confirmed In Foal</label>
+              <div style={{ display: 'flex', gap: '0.25rem' }}>
+                <input type="date" style={{ flex: 1 }} value={breedingForm.confirmedInFoal} onChange={e => setBreedingForm({ ...breedingForm, confirmedInFoal: e.target.value })} />
+                {breedingForm.confirmedInFoal && (
+                  <button type="button" onClick={() => setBreedingForm({ ...breedingForm, confirmedInFoal: '' })} title="Clear (mare lost foal)" style={{ background: '#f44336', color: 'white', border: 'none', borderRadius: '4px', padding: '0 8px' }}>✕</button>
+                )}
+              </div>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem' }}>Due Date (Auto)</label>
+              <input type="date" style={{ width: '100%' }} value={breedingForm.gestationDate} onChange={e => setBreedingForm({ ...breedingForm, gestationDate: e.target.value })} />
+            </div>
           </div>
           <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
             <button type="submit">Save Breeding Info</button>
