@@ -414,20 +414,26 @@ app.get('/api/mares/:mareId/estimated-cycles', authMiddleware, async (req, res) 
     const cycleLength = BREED_CYCLE_LENGTHS[mare.registry] || BREED_CYCLE_LENGTHS['default'];
     const estimatedCycles = [];
     
+    // Check if mare is confirmed in foal - don't show cycles if pregnant
+    let breeding;
+    if (usePostgres) {
+      const bResult = await pool.query('SELECT breed_dates, confirmed_in_foal FROM mare_breeding WHERE mare_id = $1', [mareId]);
+      breeding = bResult.rows[0];
+    } else {
+      breeding = db.mare_breeding.find(b => b.mareId === parseInt(mareId));
+    }
+    
+    if (breeding?.confirmedInFoal) {
+      // Mare is confirmed pregnant - return empty cycles
+      return res.json({ estimatedCycles, cycleLength });
+    }
+    
     // Start from the last actual cycle, or use last breed date, or default to today
     let lastDate;
     if (cycles.length > 0) {
       // Use the most recent actual cycle as base
       lastDate = new Date(cycles[0].start_date);
     } else {
-      // Check breeding info for most recent breed date from breedDates array
-      let breeding;
-      if (usePostgres) {
-        const bResult = await pool.query('SELECT breed_dates FROM mare_breeding WHERE mare_id = $1', [mareId]);
-        breeding = bResult.rows[0];
-      } else {
-        breeding = db.mare_breeding.find(b => b.mareId === parseInt(mareId));
-      }
       const breedDates = breeding?.breedDates || [];
       if (breedDates.length > 0) {
         lastDate = new Date(breedDates[breedDates.length - 1]); // Use most recent
