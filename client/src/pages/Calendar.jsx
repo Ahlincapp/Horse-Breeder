@@ -25,12 +25,14 @@ export default function Calendar() {
   const [showCycleForm, setShowCycleForm] = useState(false);
   const [showBreedingForm, setShowBreedingForm] = useState(false);
   const [showScheduleForm, setShowScheduleForm] = useState(false);
+  const [showVetForm, setShowVetForm] = useState(false);
   const [mareForm, setMareForm] = useState({ registeredName: '', barnName: '', dob: '', registry: '' });
   const [breedingForm, setBreedingForm] = useState({ breedDate: '', confirmedInFoal: '', gestationDate: '' });
   const [breedingMareId, setBreedingMareId] = useState(null);
   const [stallionForm, setStallionForm] = useState({ registeredName: '', barnName: '', dob: '', registry: '' });
   const [cycleForm, setCycleForm] = useState({ mareId: '', startDate: '', endDate: '' });
   const [scheduleForm, setScheduleForm] = useState({ stallionId: '', days: [] });
+  const [vetForm, setVetForm] = useState({ mareId: '', stallionId: '', date: '', time: '', vetName: '', reason: '', notes: '' });
   
   // Edit state
   const [editingMare, setEditingMare] = useState(null);
@@ -131,6 +133,21 @@ export default function Calendar() {
           });
         }
       }
+
+      // Add vet appointments
+      const vetAppts = await apiFetch('/api/vet-appointments').catch(() => []);
+      vetAppts.forEach(v => {
+        const title = v.vet_name 
+          ? `${v.vet_name}${v.reason ? ' - ' + v.reason : ''}` 
+          : (v.reason || 'Vet Appointment');
+        allEvents.push({
+          title: title,
+          start: v.date,
+          allDay: true,
+          backgroundColor: '#f44336',
+          borderColor: '#d32f2f',
+        });
+      });
 
       setEvents(allEvents);
     } catch (e) {
@@ -285,6 +302,22 @@ export default function Calendar() {
     }
   };
 
+  // Vet appointment handlers
+  const handleAddVetAppointment = async (e) => {
+    e.preventDefault();
+    try {
+      await apiFetch('/api/vet-appointments', {
+        method: 'POST',
+        body: JSON.stringify(vetForm),
+      });
+      setVetForm({ mareId: '', stallionId: '', date: '', time: '', vetName: '', reason: '', notes: '' });
+      setShowVetForm(false);
+      loadData();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
   // Calendar grid
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -319,6 +352,9 @@ export default function Calendar() {
         </button>
         <button onClick={() => setShowCycleForm(!showCycleForm)}>
           {showCycleForm ? '✕ Cancel' : '+ Add Heat Cycle'}
+        </button>
+        <button onClick={() => setShowVetForm(!showVetForm)}>
+          {showVetForm ? '✕ Cancel' : '+ Add Vet Appointment'}
         </button>
       </div>
 
@@ -417,6 +453,29 @@ export default function Calendar() {
             <button type="submit">Save Schedule</button>
             <button type="button" onClick={() => { setShowScheduleForm(false); setScheduleForm({ stallionId: '', days: [] }); }}>Cancel</button>
           </div>
+        </form>
+      )}
+
+      {/* Vet Appointment Form */}
+      {showVetForm && (
+        <form onSubmit={handleAddVetAppointment} style={{ background: '#ffebee', padding: '1rem', marginBottom: '1rem' }}>
+          <h4>Schedule Vet Appointment</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+            <select value={vetForm.mareId} onChange={e => setVetForm({ ...vetForm, mareId: e.target.value })}>
+              <option value="">Select Mare (optional)</option>
+              {mares.map(m => <option key={m.id} value={m.id}>{m.registeredName} {m.barnName && `(${m.barnName})`}</option>)}
+            </select>
+            <select value={vetForm.stallionId} onChange={e => setVetForm({ ...vetForm, stallionId: e.target.value })}>
+              <option value="">Select Stallion (optional)</option>
+              {stallions.map(s => <option key={s.id} value={s.id}>{s.registeredName} {s.barnName && `(${s.barnName})`}</option>)}
+            </select>
+            <input type="date" value={vetForm.date} onChange={e => setVetForm({ ...vetForm, date: e.target.value })} required />
+            <input type="time" value={vetForm.time} onChange={e => setVetForm({ ...vetForm, time: e.target.value })} />
+            <input placeholder="Vet Name" value={vetForm.vetName} onChange={e => setVetForm({ ...vetForm, vetName: e.target.value })} />
+            <input placeholder="Reason (e.g., Pregnancy Check)" value={vetForm.reason} onChange={e => setVetForm({ ...vetForm, reason: e.target.value })} />
+            <input placeholder="Notes" value={vetForm.notes} onChange={e => setVetForm({ ...vetForm, notes: e.target.value })} style={{ gridColumn: 'span 2' }} />
+          </div>
+          <button type="submit" style={{ marginTop: '0.5rem' }}>Schedule Appointment</button>
         </form>
       )}
 
@@ -562,6 +621,7 @@ export default function Calendar() {
       <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem', fontSize: '0.85rem', flexWrap: 'wrap' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <span style={{ width: '12px', height: '12px', background: '#4caf50', borderRadius: '2px' }}></span> Stallion Collection
+          <span style={{ width: '12px', height: '12px', background: '#f44336', borderRadius: '2px' }}></span> Vet Appointment
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <span style={{ width: '12px', height: '12px', background: '#ff9800', borderRadius: '2px' }}></span> Estimated Heat

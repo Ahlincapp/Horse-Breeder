@@ -15,7 +15,7 @@ app.use(express.json());
 const usePostgres = !!process.env.DATABASE_URL;
 
 let pool;
-let db = { users: [], mares: [], cycles: [], stallions: [], collections: [] };
+let db = { users: [], mares: [], cycles: [], stallions: [], collections: [], vet_appointments: [] };
 const DB_FILE = path.join(__dirname, '..', 'database.json');
 
 // Load JSON database
@@ -92,6 +92,17 @@ async function initDb() {
           collection_days INTEGER[],
           created_at TIMESTAMP DEFAULT NOW()
         );
+        CREATE TABLE IF NOT EXISTS vet_appointments (
+          id SERIAL PRIMARY KEY,
+          mare_id INTEGER REFERENCES mares(id),
+          stallion_id INTEGER REFERENCES stallions(id),
+          date DATE NOT NULL,
+          time TIME,
+          vet_name VARCHAR(255),
+          reason VARCHAR(255),
+          notes TEXT,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
       `);
       console.log('✅ PostgreSQL database initialized');
     } finally {
@@ -102,6 +113,7 @@ async function initDb() {
     // Ensure new collections exist in JSON file
     if (!db.mare_breeding) db.mare_breeding = [];
     if (!db.stallion_schedule) db.stallion_schedule = [];
+    if (!db.vet_appointments) db.vet_appointments = [];
     console.log('✅ JSON file database initialized');
   }
 }
@@ -721,6 +733,75 @@ app.get('/api/collections', authMiddleware, async (req, res) => {
       });
       res.json(collections);
     }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- Vet Appointment routes (protected) ----------
+app.get('/api/vet-appointments', authMiddleware, async (req, res) => {
+  try {
+    if (usePostgres) {
+      const result = await pool.query(`
+        SELECT v.id, v.mare_id, v.stallion_id, v.date, v.time, v.vet_name, v.reason, v.notes,
+               m.registered_name as mare_name, m.barn_name as mare_barn,
+               s.registered_name as stallion_name, s.barn_name as stallion_barn
+        FROM vet_appointments v
+        LEFT JOIN mares m ON v.mare_id = m.id
+        LEFT JOIN stallions s ON v.stallion_id = s.id
+        ORDER BY v.date ASC
+      `);
+      res.json(result.rows);
+    } else {
+      const appointments = db.vet_appointments.map(v => {
+        const mare = db.mares.find(m => m.id === v.mareId);
+        const stallion = db.stallions.find(s => s.id === v.stallionId);
+        return {
+          ...v,
+          mare_name: mare?.registeredName,
+          mare_barn: mare?.barnName,
+          stallion_name: stallion?.registeredName,
+          stallion_barn: stallion?.barnName
+        };
+      });
+      res.json(appointments);
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/vet-appointments', authMiddleware, async (req, res) => {
+  const { mareId, stallionId, date, time, vetName, reason, notes } = req.body;
+  try {
+    if (usePostgres) {
+      const result = await pool.query(
+        'INSERT INTO vet_appointments (mare_id, stallion_id, date, time, vet_name, reason, notes) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+        [mareId || null, stallionId || null, date, time || null, vetName || null, reason || null, notes || null]
+      );
+      const v = result.rows[0];
+      res.json({ id: v.id, mareId: v.mare_id, stallionId: v.stallion_id, date: v.date, time: v.time, vetName: v.vet_name, reason: v.reason, notes: v.notes });
+    } else {
+      const appt = { id: Date.now(), mareId: mareId || null, stallionId: stallionId || null, date, time: time || null, vetName: vetName || null, reason: reason || null, notes: notes || null, created_at: new Date().toISOString() };
+      db.vet_appointments.push(appt);
+      saveJsonDb();
+      res.json(appt);
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/vet-appointments/:id', authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  try {
+    if (usePostgres) {
+      await pool.query('DELETE FROM vet_appointments WHERE id = $1', [id]);
+    } else {
+      db.vet_appointments = db.vet_appointments.filter(v => v.id !== parseInt(id));
+      saveJsonDb();
+    }
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
