@@ -5,7 +5,7 @@ import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 
 function App() {
-  const isLoggedIn = !!localStorage.getItem('token');
+  // Skip auth check - use default user
   return (
     <Router>
       <Routes>
@@ -13,7 +13,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route
           path="/"
-          element={isLoggedIn ? <Navigate to="/calendar" replace /> : <Navigate to="/login" replace />}
+          element={<Navigate to="/calendar" replace />}
         />
         <Route path="/calendar" element={<Calendar />} />
       </Routes>
