@@ -81,7 +81,7 @@ async function initDb() {
         CREATE TABLE IF NOT EXISTS mare_breeding (
           id SERIAL PRIMARY KEY,
           mare_id INTEGER UNIQUE REFERENCES mares(id),
-          breed_date DATE,
+          breed_dates DATE[],
           confirmed_in_foal DATE,
           gestation_date DATE,
           created_at TIMESTAMP DEFAULT NOW()
@@ -282,14 +282,14 @@ app.get('/api/mares/:mareId/breeding', authMiddleware, async (req, res) => {
     if (usePostgres) {
       const result = await pool.query('SELECT * FROM mare_breeding WHERE mare_id = $1', [mareId]);
       if (result.rows.length === 0) {
-        res.json({ mareId: parseInt(mareId), breedDate: null, confirmedInFoal: null, gestationDate: null });
+        res.json({ mareId: parseInt(mareId), breedDates: [], confirmedInFoal: null, gestationDate: null });
       } else {
         const b = result.rows[0];
-        res.json({ mareId: b.mare_id, breedDate: b.breed_date, confirmedInFoal: b.confirmed_in_foal, gestationDate: b.gestation_date });
+        res.json({ mareId: b.mare_id, breedDates: b.breed_dates || [], confirmedInFoal: b.confirmed_in_foal, gestationDate: b.gestation_date });
       }
     } else {
       const breeding = db.mare_breeding.find(b => b.mareId === parseInt(mareId));
-      res.json(breeding || { mareId: parseInt(mareId), breedDate: null, confirmedInFoal: null, gestationDate: null });
+      res.json(breeding || { mareId: parseInt(mareId), breedDates: [], confirmedInFoal: null, gestationDate: null });
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -298,7 +298,7 @@ app.get('/api/mares/:mareId/breeding', authMiddleware, async (req, res) => {
 
 app.put('/api/mares/:mareId/breeding', authMiddleware, async (req, res) => {
   const { mareId } = req.params;
-  const { breedDate, confirmedInFoal, gestationDate } = req.body;
+  const { breedDate, breedDates, confirmedInFoal, gestationDate } = req.body;
   try {
     // Get mare's registry to calculate gestation period
     let mare;
@@ -311,13 +311,35 @@ app.put('/api/mares/:mareId/breeding', authMiddleware, async (req, res) => {
     
     const gestationPeriod = BREED_GESTATION_PERIODS[mare?.registry] || BREED_GESTATION_PERIODS['default'];
     
+    // Get existing breeding info
+    let existingBreedDates = [];
+    if (usePostgres) {
+      const existing = await pool.query('SELECT breed_dates FROM mare_breeding WHERE mare_id = $1', [mareId]);
+      if (existing.rows.length > 0) {
+        existingBreedDates = existing.rows[0].breed_dates || [];
+      }
+    } else {
+      const existing = db.mare_breeding.find(b => b.mareId === parseInt(mareId));
+      if (existing) {
+        existingBreedDates = existing.breedDates || [];
+      }
+    }
+    
+    // Handle new breed date - append to array
+    let newBreedDates = [...existingBreedDates];
+    if (breedDate && !newBreedDates.includes(breedDate)) {
+      newBreedDates.push(breedDate);
+      newBreedDates.sort(); // Keep sorted
+    }
+    
     // Auto-calculate gestation date if confirmedInFoal is set but gestationDate is not
     let autoGestationDate = gestationDate;
-    if (confirmedInFoal && !gestationDate && breedDate) {
-      const bd = new Date(breedDate);
+    const latestBreedDate = newBreedDates.length > 0 ? newBreedDates[newBreedDates.length - 1] : null;
+    if (confirmedInFoal && !gestationDate && latestBreedDate) {
+      const bd = new Date(latestBreedDate);
       bd.setDate(bd.getDate() + gestationPeriod);
       autoGestationDate = bd.toISOString().split('T')[0];
-    } else if (confirmedInFoal && !gestationDate && !breedDate) {
+    } else if (confirmedInFoal && !gestationDate && !latestBreedDate) {
       // Use confirmedInFoal date as the breeding reference point
       const cf = new Date(confirmedInFoal);
       cf.setDate(cf.getDate() + gestationPeriod);
@@ -326,16 +348,16 @@ app.put('/api/mares/:mareId/breeding', authMiddleware, async (req, res) => {
     
     if (usePostgres) {
       await pool.query(
-        `INSERT INTO mare_breeding (mare_id, breed_date, confirmed_in_foal, gestation_date)
+        `INSERT INTO mare_breeding (mare_id, breed_dates, confirmed_in_foal, gestation_date)
          VALUES ($1, $2, $3, $4)
          ON CONFLICT (mare_id) DO UPDATE SET
-         breed_date = $2, confirmed_in_foal = $3, gestation_date = $4`,
-        [mareId, breedDate || null, confirmedInFoal || null, autoGestationDate || null]
+         breed_dates = $2, confirmed_in_foal = $3, gestation_date = $4`,
+        [mareId, newBreedDates, confirmedInFoal || null, autoGestationDate || null]
       );
-      res.json({ mareId: parseInt(mareId), breedDate, confirmedInFoal, gestationDate: autoGestationDate });
+      res.json({ mareId: parseInt(mareId), breedDates: newBreedDates, confirmedInFoal, gestationDate: autoGestationDate });
     } else {
       const idx = db.mare_breeding.findIndex(b => b.mareId === parseInt(mareId));
-      const breeding = { mareId: parseInt(mareId), breedDate, confirmedInFoal, gestationDate: autoGestationDate };
+      const breeding = { mareId: parseInt(mareId), breedDates: newBreedDates, confirmedInFoal, gestationDate: autoGestationDate };
       if (idx >= 0) {
         db.mare_breeding[idx] = breeding;
       } else {
@@ -398,17 +420,17 @@ app.get('/api/mares/:mareId/estimated-cycles', authMiddleware, async (req, res) 
       // Use the most recent actual cycle as base
       lastDate = new Date(cycles[0].start_date);
     } else {
-      // Check breeding info for most recent breed date
+      // Check breeding info for most recent breed date from breedDates array
       let breeding;
       if (usePostgres) {
-        const bResult = await pool.query('SELECT breed_date FROM mare_breeding WHERE mare_id = $1 AND breed_date IS NOT NULL ORDER BY breed_date DESC LIMIT 1', [mareId]);
+        const bResult = await pool.query('SELECT breed_dates FROM mare_breeding WHERE mare_id = $1', [mareId]);
         breeding = bResult.rows[0];
       } else {
-        const breedingList = db.mare_breeding.filter(b => b.mareId === parseInt(mareId) && b.breedDate).sort((a, b) => new Date(b.breedDate) - new Date(a.breedDate));
-        breeding = breedingList[0];
+        breeding = db.mare_breeding.find(b => b.mareId === parseInt(mareId));
       }
-      if (breeding && breeding.breedDate) {
-        lastDate = new Date(breeding.breedDate);
+      const breedDates = breeding?.breedDates || [];
+      if (breedDates.length > 0) {
+        lastDate = new Date(breedDates[breedDates.length - 1]); // Use most recent
       } else {
         lastDate = new Date();
       }

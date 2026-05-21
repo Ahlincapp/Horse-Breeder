@@ -27,7 +27,7 @@ export default function Calendar() {
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [showVetForm, setShowVetForm] = useState(false);
   const [mareForm, setMareForm] = useState({ registeredName: '', barnName: '', dob: '', registry: '' });
-  const [breedingForm, setBreedingForm] = useState({ breedDate: '', confirmedInFoal: '', gestationDate: '' });
+  const [breedingForm, setBreedingForm] = useState({ breedDate: '', breedDates: [], confirmedInFoal: '', gestationDate: '' });
   const [breedingMareId, setBreedingMareId] = useState(null);
   const [stallionForm, setStallionForm] = useState({ registeredName: '', barnName: '', dob: '', registry: '' });
   const [cycleForm, setCycleForm] = useState({ mareId: '', startDate: '', endDate: '' });
@@ -182,13 +182,14 @@ export default function Calendar() {
   const handleAddBreeding = async (e) => {
     e.preventDefault();
     try {
+      // Send the form data - backend handles appending to breedDates array
       await apiFetch(`/api/mares/${breedingMareId}/breeding`, {
         method: 'PUT',
         body: JSON.stringify(breedingForm),
       });
       setShowBreedingForm(false);
       setBreedingMareId(null);
-      setBreedingForm({ breedDate: '', confirmedInFoal: '', gestationDate: '' });
+      setBreedingForm({ breedDate: '', breedDates: [], confirmedInFoal: '', gestationDate: '' });
       loadData();
     } catch (e) {
       setError(e.message);
@@ -418,14 +419,24 @@ export default function Calendar() {
       {showBreedingForm && (
         <form onSubmit={handleAddBreeding} style={{ background: '#e3f2fd', padding: '1rem', marginBottom: '1rem' }}>
           <h4>Set Breeding Info</h4>
+          {/* Show existing breed dates */}
+          {breedingForm.breedDates && breedingForm.breedDates.length > 0 && (
+            <div style={{ marginBottom: '0.5rem' }}>
+              <strong>Breed Dates:</strong>
+              <ul style={{ margin: '0.25rem 0', paddingLeft: '1.5rem' }}>
+                {breedingForm.breedDates.map((d, i) => <li key={i}>{d}</li>)}
+              </ul>
+            </div>
+          )}
+          {/* Add new breed date */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
-            <input type="date" placeholder="Breed Date" value={breedingForm.breedDate} onChange={e => setBreedingForm({ ...breedingForm, breedDate: e.target.value })} />
+            <input type="date" placeholder="Add Breed Date" value={breedingForm.breedDate} onChange={e => setBreedingForm({ ...breedingForm, breedDate: e.target.value })} />
             <input type="date" placeholder="Confirmed In Foal" value={breedingForm.confirmedInFoal} onChange={e => setBreedingForm({ ...breedingForm, confirmedInFoal: e.target.value })} />
             <input type="date" placeholder="Gestation Due Date" value={breedingForm.gestationDate} onChange={e => setBreedingForm({ ...breedingForm, gestationDate: e.target.value })} />
           </div>
           <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
             <button type="submit">Save Breeding Info</button>
-            <button type="button" onClick={() => { setShowBreedingForm(false); setBreedingMareId(null); }}>Cancel</button>
+            <button type="button" onClick={() => { setShowBreedingForm(false); setBreedingMareId(null); setBreedingForm({ breedDate: '', breedDates: [], confirmedInFoal: '', gestationDate: '' }); }}>Cancel</button>
           </div>
         </form>
       )}
@@ -541,10 +552,21 @@ export default function Calendar() {
                     <button onClick={() => setEditingMare(m)}>Edit</button>
                     <button onClick={async () => {
                       const breeding = await apiFetch(`/api/mares/${m.id}/breeding`).catch(() => ({}));
-                      setBreedingForm({ breedDate: breeding.breedDate || '', confirmedInFoal: breeding.confirmedInFoal || '', gestationDate: breeding.gestationDate || '' });
+                      setBreedingForm({ breedDate: '', breedDates: breeding.breedDates || [], confirmedInFoal: breeding.confirmedInFoal || '', gestationDate: breeding.gestationDate || '' });
                       setBreedingMareId(m.id);
                       setShowBreedingForm(true);
                     }}>Breeding Info</button>
+                    <button onClick={async () => {
+                      const today = new Date().toISOString().split('T')[0];
+                      const confirmed = confirm('Confirm this mare is in foal? This will hide heat cycle projections.');
+                      if (confirmed) {
+                        await apiFetch(`/api/mares/${m.id}/breeding`, {
+                          method: 'PUT',
+                          body: JSON.stringify({ confirmedInFoal: today }),
+                        });
+                        loadData();
+                      }
+                    }} style={{ background: '#00bcd4', color: 'white', border: 'none' }}>Confirm In Foal</button>
                     <button onClick={() => handleDeleteMare(m.id)} style={{ color: 'red' }}>Delete</button>
                   </div>
                 </li>
