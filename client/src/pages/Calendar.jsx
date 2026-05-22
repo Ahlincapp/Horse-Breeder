@@ -572,8 +572,8 @@ export default function Calendar() {
                     }}>Breeding Info</button>
                     <button onClick={async () => {
                       // Fetch current breeding info to see if already confirmed
-                      const breeding = await apiFetch(`/api/mares/${m.id}/breeding`).catch(() => ({}));
-                      const currentConfirmed = breeding.confirmedInFoal || '';
+                      const currentBreeding = await apiFetch(`/api/mares/${m.id}/breeding`).catch(() => ({}));
+                      const currentConfirmed = currentBreeding.confirmedInFoal || '';
                       const date = prompt('Enter confirmation date (YYYY-MM-DD) or leave empty to clear:', currentConfirmed || new Date().toISOString().split('T')[0]);
                       if (date === null) return; // Cancelled
                       const trimmed = date.trim();
@@ -594,7 +594,7 @@ export default function Calendar() {
                         });
                         loadData();
                       }
-                    }} style={{ background: '#00bcd4', color: 'white', border: 'none' }}>{breeding?.confirmedInFoal ? 'Edit In Foal' : 'Confirm In Foal'}</button>
+                    }} style={{ background: '#00bcd4', color: 'white', border: 'none' }}>Confirm In Foal</button>
                     <button onClick={() => handleDeleteMare(m.id)} style={{ color: 'red' }}>Delete</button>
                   </div>
                 </li>
