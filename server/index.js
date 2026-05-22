@@ -580,6 +580,44 @@ app.post('/api/mares/:mareId/cycles', authMiddleware, async (req, res) => {
   }
 });
 
+app.put('/api/cycles/:cycleId', authMiddleware, async (req, res) => {
+  const { cycleId } = req.params;
+  const { startDate, endDate } = req.body;
+  try {
+    if (usePostgres) {
+      const result = await pool.query(
+        'UPDATE cycles SET start_date = $1, end_date = $2 WHERE id = $3 RETURNING *',
+        [startDate, endDate, cycleId]
+      );
+      const cycle = result.rows[0];
+      res.json({ id: cycle.id, mareId: cycle.mare_id, startDate: cycle.start_date, endDate: cycle.end_date });
+    } else {
+      const idx = db.cycles.findIndex(c => c.id === parseInt(cycleId));
+      if (idx === -1) return res.status(404).json({ error: 'Cycle not found' });
+      db.cycles[idx] = { ...db.cycles[idx], startDate, endDate };
+      saveJsonDb();
+      res.json(db.cycles[idx]);
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/cycles/:cycleId', authMiddleware, async (req, res) => {
+  const { cycleId } = req.params;
+  try {
+    if (usePostgres) {
+      await pool.query('DELETE FROM cycles WHERE id = $1', [cycleId]);
+    } else {
+      db.cycles = db.cycles.filter(c => c.id !== parseInt(cycleId));
+      saveJsonDb();
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------- Stallion routes (protected) ----------
 app.post('/api/stallions', authMiddleware, async (req, res) => {
   const { registeredName, barnName, dob, registry } = req.body;

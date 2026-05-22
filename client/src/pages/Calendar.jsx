@@ -12,6 +12,16 @@ const REGISTRIES = [
   'Other'
 ];
 
+const STALLION_COLORS = [
+  { backgroundColor: '#2e7d32', borderColor: '#1b5e20' }, // green
+  { backgroundColor: '#1565c0', borderColor: '#0d47a1' }, // blue
+  { backgroundColor: '#6a1b9a', borderColor: '#4a148c' }, // purple
+  { backgroundColor: '#c62828', borderColor: '#b71c1c' }, // red
+  { backgroundColor: '#ef6c00', borderColor: '#e65100' }, // orange
+  { backgroundColor: '#00838f', borderColor: '#006064' }, // teal
+  { backgroundColor: '#4527a0', borderColor: '#311b92' }, // deep purple
+];
+
 export default function Calendar() {
   const [mares, setMares] = useState([]);
   const [stallions, setStallions] = useState([]);
@@ -37,6 +47,8 @@ export default function Calendar() {
   // Edit state
   const [editingMare, setEditingMare] = useState(null);
   const [editingStallion, setEditingStallion] = useState(null);
+  const [editingCyclesMare, setEditingCyclesMare] = useState(null);
+  const [mareCycles, setMareCycles] = useState([]);
 
   useEffect(() => {
     loadData();
@@ -52,9 +64,11 @@ export default function Calendar() {
       const allEvents = [];
       const fmt = (d) => d.toISOString().split('T')[0];
 
-      for (const s of stallionsData) {
+      for (let si = 0; si < stallionsData.length; si++) {
+        const s = stallionsData[si];
         const schedule = await apiFetch(`/api/stallions/${s.id}/schedule`).catch(() => ({ days: [] }));
         const days = schedule.days || [];
+        const stallionColor = STALLION_COLORS[si % STALLION_COLORS.length];
         const now = new Date();
         const end = new Date();
         end.setDate(now.getDate() + 60);
@@ -64,8 +78,8 @@ export default function Calendar() {
               title: `${s.barnName || s.registeredName} collection`,
               start: fmt(d),
               allDay: true,
-              backgroundColor: '#4caf50',
-              borderColor: '#388e3c',
+              backgroundColor: stallionColor.backgroundColor,
+              borderColor: stallionColor.borderColor,
             });
           }
         }
@@ -303,6 +317,40 @@ export default function Calendar() {
     }
   };
 
+  const handleEditCycles = async (mareId) => {
+    try {
+      const cycles = await apiFetch(`/api/mares/${mareId}/cycles`);
+      setMareCycles(cycles);
+      setEditingCyclesMare(mares.find(m => m.id === mareId));
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handleDeleteCycle = async (cycleId) => {
+    if (!confirm('Delete this cycle?')) return;
+    try {
+      await apiFetch(`/api/cycles/${cycleId}`, { method: 'DELETE' });
+      setMareCycles(mareCycles.filter(c => c.id !== cycleId));
+      loadData();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handleUpdateCycle = async (cycleId, startDate, endDate) => {
+    try {
+      await apiFetch(`/api/cycles/${cycleId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ startDate, endDate }),
+      });
+      setMareCycles(mareCycles.map(c => c.id === cycleId ? { ...c, startDate, endDate } : c));
+      loadData();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
   // Vet appointment handlers
   const handleAddVetAppointment = async (e) => {
     e.preventDefault();
@@ -504,6 +552,32 @@ export default function Calendar() {
         </form>
       )}
 
+      {/* Edit Cycles Modal */}
+      {editingCyclesMare && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'white', padding: '1.5rem', borderRadius: '8px', maxWidth: '500px', width: '90%', maxHeight: '80vh', overflow: 'auto' }}>
+            <h3>Edit Cycles - {editingCyclesMare.registeredName}</h3>
+            {mareCycles.length === 0 ? (
+              <p>No heat cycles recorded yet.</p>
+            ) : (
+              <ul style={{ listStyle: 'none', padding: 0 }}>
+                {mareCycles.sort((a, b) => new Date(b.startDate) - new Date(a.startDate)).map(c => (
+                  <li key={c.id} style={{ marginBottom: '0.75rem', padding: '0.5rem', background: '#f5f5f5', borderRadius: '4px' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <input type="date" value={c.startDate} onChange={e => handleUpdateCycle(c.id, e.target.value, c.endDate)} />
+                      <span>to</span>
+                      <input type="date" value={c.endDate} onChange={e => handleUpdateCycle(c.id, c.startDate, e.target.value)} />
+                      <button onClick={() => handleDeleteCycle(c.id)} style={{ color: 'red', marginLeft: 'auto' }}>Delete</button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button onClick={() => setEditingCyclesMare(null)} style={{ marginTop: '1rem' }}>Close</button>
+          </div>
+        </div>
+      )}
+
 
       {/* Edit Mare Modal */}
       {editingMare && (
@@ -564,6 +638,7 @@ export default function Calendar() {
                   <br /><small>{m.registry} • DOB: {m.dob}</small>
                   <div style={{ marginTop: '0.25rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                     <button onClick={() => setEditingMare(m)}>Edit</button>
+                    <button onClick={() => handleEditCycles(m.id)}>Cycles</button>
                     <button onClick={async () => {
                       const breeding = await apiFetch(`/api/mares/${m.id}/breeding`).catch(() => ({}));
                       setBreedingForm({ breedDate: '', breedDates: breeding.breedDates || [], confirmedInFoal: breeding.confirmedInFoal || '', gestationDate: breeding.gestationDate || '' });
