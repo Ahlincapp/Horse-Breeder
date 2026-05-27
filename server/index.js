@@ -82,6 +82,7 @@ async function initDb() {
           id SERIAL PRIMARY KEY,
           mare_id INTEGER UNIQUE REFERENCES mares(id),
           breed_dates DATE[],
+          stallion_id INTEGER REFERENCES stallions(id),
           confirmed_in_foal DATE,
           gestation_date DATE,
           created_at TIMESTAMP DEFAULT NOW()
@@ -282,14 +283,14 @@ app.get('/api/mares/:mareId/breeding', authMiddleware, async (req, res) => {
     if (usePostgres) {
       const result = await pool.query('SELECT * FROM mare_breeding WHERE mare_id = $1', [mareId]);
       if (result.rows.length === 0) {
-        res.json({ mareId: parseInt(mareId), breedDates: [], confirmedInFoal: null, gestationDate: null });
+        res.json({ mareId: parseInt(mareId), breedDates: [], stallionId: null, confirmedInFoal: null, gestationDate: null });
       } else {
         const b = result.rows[0];
-        res.json({ mareId: b.mare_id, breedDates: b.breed_dates || [], confirmedInFoal: b.confirmed_in_foal, gestationDate: b.gestation_date });
+        res.json({ mareId: b.mare_id, breedDates: b.breed_dates || [], stallionId: b.stallion_id, confirmedInFoal: b.confirmed_in_foal, gestationDate: b.gestation_date });
       }
     } else {
       const breeding = db.mare_breeding.find(b => b.mareId === parseInt(mareId));
-      res.json(breeding || { mareId: parseInt(mareId), breedDates: [], confirmedInFoal: null, gestationDate: null });
+      res.json(breeding || { mareId: parseInt(mareId), breedDates: [], stallionId: null, confirmedInFoal: null, gestationDate: null });
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -298,7 +299,7 @@ app.get('/api/mares/:mareId/breeding', authMiddleware, async (req, res) => {
 
 app.put('/api/mares/:mareId/breeding', authMiddleware, async (req, res) => {
   const { mareId } = req.params;
-  const { breedDate, breedDates, confirmedInFoal, gestationDate } = req.body;
+  const { breedDate, breedDates, confirmedInFoal, gestationDate, stallionId } = req.body;
   try {
     // Get mare's registry to calculate gestation period
     let mare;
@@ -348,16 +349,16 @@ app.put('/api/mares/:mareId/breeding', authMiddleware, async (req, res) => {
     
     if (usePostgres) {
       await pool.query(
-        `INSERT INTO mare_breeding (mare_id, breed_dates, confirmed_in_foal, gestation_date)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO mare_breeding (mare_id, breed_dates, stallion_id, confirmed_in_foal, gestation_date)
+         VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (mare_id) DO UPDATE SET
-         breed_dates = $2, confirmed_in_foal = $3, gestation_date = $4`,
-        [mareId, newBreedDates, confirmedInFoal || null, autoGestationDate || null]
+         breed_dates = $2, stallion_id = $3, confirmed_in_foal = $4, gestation_date = $5`,
+        [mareId, newBreedDates, stallionId || null, confirmedInFoal || null, autoGestationDate || null]
       );
-      res.json({ mareId: parseInt(mareId), breedDates: newBreedDates, confirmedInFoal, gestationDate: autoGestationDate });
+      res.json({ mareId: parseInt(mareId), breedDates: newBreedDates, stallionId, confirmedInFoal, gestationDate: autoGestationDate });
     } else {
       const idx = db.mare_breeding.findIndex(b => b.mareId === parseInt(mareId));
-      const breeding = { mareId: parseInt(mareId), breedDates: newBreedDates, confirmedInFoal, gestationDate: autoGestationDate };
+      const breeding = { mareId: parseInt(mareId), breedDates: newBreedDates, stallionId, confirmedInFoal, gestationDate: autoGestationDate };
       if (idx >= 0) {
         db.mare_breeding[idx] = breeding;
       } else {
