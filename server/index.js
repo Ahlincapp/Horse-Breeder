@@ -1,4 +1,4 @@
-// Express backend for Horse Breeder app - Dual mode (PostgreSQL + JSON fallback)
+// Express backend for Horse Breeder app - Triple mode (PostgreSQL + SQLite + JSON fallback)
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -11,11 +11,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Check which mode to use
+// Check which mode to use: postgres > json
+// Note: SQLite available but requires compatible GLIBC (not available in all environments)
 const usePostgres = !!process.env.DATABASE_URL;
+const useSqlite = !usePostgres && process.env.SQLITE_PATH && (() => {
+  try { require('sqlite3'); return true; } catch { return false; }
+})();
 
 let pool;
-let db = { users: [], mares: [], cycles: [], stallions: [], collections: [], vet_appointments: [] };
+let sqliteDb = null;
+let jsonDb = { users: [], mares: [], cycles: [], stallions: [], collections: [], vet_appointments: [], mare_breeding: [], stallion_schedule: [] };
+const db = jsonDb; // Alias for backward compatibility with routes
 const DB_FILE = path.join(__dirname, '..', 'database.json');
 
 // Load JSON database
@@ -23,15 +29,106 @@ function loadJsonDb() {
   try {
     if (fs.existsSync(DB_FILE)) {
       const data = fs.readFileSync(DB_FILE, 'utf8');
-      db = JSON.parse(data);
+      jsonDb = JSON.parse(data);
     }
   } catch (err) {
     console.log('Starting with empty database');
   }
+  // Ensure all collections exist
+  if (!jsonDb.mare_breeding) jsonDb.mare_breeding = [];
+  if (!jsonDb.stallion_schedule) jsonDb.stallion_schedule = [];
+  if (!jsonDb.vet_appointments) jsonDb.vet_appointments = [];
 }
 
 function saveJsonDb() {
-  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+  fs.writeFileSync(DB_FILE, JSON.stringify(jsonDb, null, 2));
+}
+
+// SQLite helpers
+function sqliteRun(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    sqliteDb.run(sql, params, function(err) {
+      if (err) reject(err);
+      else resolve({ lastID: this.lastID, changes: this.changes });
+    });
+  });
+}
+
+function sqliteGet(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    sqliteDb.get(sql, params, (err, row) => {
+      if (err) reject(err);
+      else resolve(row);
+    });
+  });
+}
+
+function sqliteAll(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    sqliteDb.all(sql, params, (err, rows) => {
+      if (err) reject(err);
+      else resolve(rows);
+    });
+  });
+}
+
+// Unified DB helpers (PostgreSQL + JSON)
+function dbRun(table, data) {
+  const now = new Date().toISOString();
+  if (usePostgres) {
+    const cols = Object.keys(data).join(', ');
+    const vals = Object.keys(data).map((_, i) => `$${i + 1}`).join(', ');
+    return pool.query(`INSERT INTO ${table} (${cols}) VALUES (${vals}) RETURNING *`, Object.values(data));
+  } else {
+    const record = { id: Date.now(), ...data, created_at: now };
+    jsonDb[table].push(record);
+    saveJsonDb();
+    return Promise.resolve({ rows: [record] });
+  }
+}
+
+function dbGet(table, where, params = []) {
+  const conditions = Object.entries(where).map(([k, v], i) => `${k} = $${i + 1}`).join(' AND ');
+  if (usePostgres) {
+    return pool.query(`SELECT * FROM ${table} WHERE ${conditions}`, params).then(r => ({ rows: r.rows }));
+  } else {
+    const record = jsonDb[table].find(r => Object.entries(where).every(([k, v]) => r[k] === v));
+    return Promise.resolve({ rows: record ? [record] : [] });
+  }
+}
+
+function dbAll(table, where = null, params = []) {
+  if (usePostgres) {
+    const sql = where ? `SELECT * FROM ${table} WHERE ${where}` : `SELECT * FROM ${table}`;
+    return pool.query(sql, params).then(r => ({ rows: r.rows }));
+  } else {
+    let records = jsonDb[table];
+    if (where) {
+      const match = where.match(/(\w+)\s*=\s*\$(\d+)/);
+      if (match) {
+        const key = match[1];
+        const idx = parseInt(match[2]) - 1;
+        records = records.filter(r => r[key] == params[idx]);
+      }
+    }
+    return Promise.resolve({ rows: records });
+  }
+}
+
+function dbUpdate(table, id, data) {
+  if (usePostgres) {
+    const sets = Object.keys(data).map((k, i) => `${k} = $${i + 2}`).join(', ');
+    return pool.query(`UPDATE ${table} SET ${sets} WHERE id = $1 RETURNING *`, [id, ...Object.values(data)]);
+  } else {
+    const idx = jsonDb[table].findIndex(r => r.id == id);
+    if (idx >= 0) { jsonDb[table][idx] = { ...jsonDb[table][idx], ...data }; saveJsonDb(); }
+    return Promise.resolve({ rows: jsonDb[table][idx] ? [jsonDb[table][idx]] : [] });
+  }
+}
+
+function dbDelete(table, id) {
+  if (usePostgres) return pool.query(`DELETE FROM ${table} WHERE id = $1`, [id]);
+  else { jsonDb[table] = jsonDb[table].filter(r => r.id != id); saveJsonDb(); return Promise.resolve({}); }
 }
 
 // Initialize database
@@ -52,8 +149,10 @@ async function initDb() {
         CREATE TABLE IF NOT EXISTS mares (
           id SERIAL PRIMARY KEY,
           user_id INTEGER REFERENCES users(id),
-          name VARCHAR(255) NOT NULL,
-          birth_date DATE,
+          registered_name VARCHAR(255),
+          barn_name VARCHAR(255),
+          dob DATE,
+          registry VARCHAR(255),
           created_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS cycles (
@@ -65,8 +164,10 @@ async function initDb() {
         );
         CREATE TABLE IF NOT EXISTS stallions (
           id SERIAL PRIMARY KEY,
-          name VARCHAR(255) NOT NULL,
-          breed VARCHAR(255),
+          registered_name VARCHAR(255),
+          barn_name VARCHAR(255),
+          dob DATE,
+          registry VARCHAR(255),
           created_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS collections (
@@ -109,12 +210,78 @@ async function initDb() {
     } finally {
       client.release();
     }
+  } else if (useSqlite) {
+    const sqlite3 = require('sqlite3').verbose();
+    sqliteDb = new sqlite3.Database(process.env.SQLITE_PATH);
+    
+    await sqliteRun(`CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+    await sqliteRun(`CREATE TABLE IF NOT EXISTS mares (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      registered_name TEXT,
+      barn_name TEXT,
+      dob TEXT,
+      registry TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+    await sqliteRun(`CREATE TABLE IF NOT EXISTS cycles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mare_id INTEGER,
+      start_date TEXT,
+      end_date TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+    await sqliteRun(`CREATE TABLE IF NOT EXISTS stallions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      registered_name TEXT,
+      barn_name TEXT,
+      dob TEXT,
+      registry TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+    await sqliteRun(`CREATE TABLE IF NOT EXISTS collections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stallion_id INTEGER,
+      mare_id INTEGER,
+      cycle_id INTEGER,
+      date TEXT,
+      method TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+    await sqliteRun(`CREATE TABLE IF NOT EXISTS mare_breeding (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mare_id INTEGER UNIQUE,
+      breed_dates TEXT,
+      confirmed_in_foal TEXT,
+      gestation_date TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+    await sqliteRun(`CREATE TABLE IF NOT EXISTS stallion_schedule (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stallion_id INTEGER UNIQUE,
+      collection_days TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+    await sqliteRun(`CREATE TABLE IF NOT EXISTS vet_appointments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mare_id INTEGER,
+      stallion_id INTEGER,
+      date TEXT NOT NULL,
+      time TEXT,
+      vet_name TEXT,
+      reason TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+    console.log('✅ SQLite database initialized at', process.env.SQLITE_PATH);
   } else {
     loadJsonDb();
-    // Ensure new collections exist in JSON file
-    if (!db.mare_breeding) db.mare_breeding = [];
-    if (!db.stallion_schedule) db.stallion_schedule = [];
-    if (!db.vet_appointments) db.vet_appointments = [];
     console.log('✅ JSON file database initialized');
   }
 }
@@ -878,8 +1045,9 @@ app.delete('/api/vet-appointments/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// ---------- Seed route ----------
+// ---------- Seed route (with test data) ----------
 app.get('/api/seed', async (req, res) => {
+  const ADMIN_ID = 1778864389096;
   try {
     if (usePostgres) {
       const existing = await pool.query('SELECT id FROM users LIMIT 1');
@@ -887,14 +1055,56 @@ app.get('/api/seed', async (req, res) => {
         return res.json({ message: 'User already exists' });
       }
       const hashed = bcrypt.hashSync('horse2026', 10);
-      await pool.query('INSERT INTO users (name, email, password) VALUES ($1, $2, $3)', ['Admin', 'admin@horse.com', hashed]);
-      res.json({ message: 'Default user created', email: 'admin@horse.com', password: 'horse2026' });
+      await pool.query('INSERT INTO users (id, name, email, password) VALUES ($1, $2, $3, $4)', [ADMIN_ID, 'Admin', 'admin@horse.com', hashed]);
+      
+      // Seed test data
+      await pool.query(`INSERT INTO stallions (id, registered_name, barn_name, registry) VALUES ($1, $2, $3, $4)`, [1, 'Iron Duke', 'Duke', 'American Quarter Horse Association']);
+      await pool.query(`INSERT INTO stallion_schedule (stallion_id, collection_days) VALUES ($1, $2)`, [1, [1, 3, 5]]);
+      await pool.query(`INSERT INTO mares (id, user_id, registered_name, barn_name, registry) VALUES ($1, $2, $3, $4, $5)`, [1, ADMIN_ID, 'Sunset Rose', 'Rose', 'American Quarter Horse Association']);
+      await pool.query(`INSERT INTO mare_breeding (mare_id, breed_dates, confirmed_in_foal, gestation_date) VALUES ($1, $2, $3, $4)`, [1, ['2026-05-01'], '2026-05-15', '2027-04-06']);
+      await pool.query(`INSERT INTO vet_appointments (id, mare_id, date, vet_name, reason) VALUES ($1, $2, $3, $4, $5)`, [1, 1, '2026-06-15', 'Dr. Smith', 'Pregnancy Check']);
+      
+      res.json({ message: 'Default user + test data created', email: 'admin@horse.com', password: 'horse2026' });
     } else {
-      if (db.users.length > 0) {
+      if (jsonDb.users.length > 0) {
         return res.json({ message: 'User already exists' });
       }
       const hashed = bcrypt.hashSync('horse2026', 10);
-      db.users.push({ id: Date.now(), name: 'Admin', email: 'admin@horse.com', password: hashed, created_at: new Date().toISOString() });
+      jsonDb.users.push({ id: ADMIN_ID, name: 'Admin', email: 'admin@horse.com', password: hashed, created_at: new Date().toISOString() });
+      
+      // Seed test data
+      jsonDb.stallions.push({ id: 1, registeredName: 'Iron Duke', barnName: 'Duke', registry: 'American Quarter Horse Association', created_at: new Date().toISOString() });
+      jsonDb.stallion_schedule.push({ stallionId: 1, days: [1, 3, 5] });
+      jsonDb.mares.push({ id: 1, userId: ADMIN_ID, registeredName: 'Sunset Rose', barnName: 'Rose', registry: 'American Quarter Horse Association', created_at: new Date().toISOString() });
+      jsonDb.mare_breeding.push({ mareId: 1, breedDates: ['2026-05-01'], confirmedInFoal: '2026-05-15', gestationDate: '2027-04-06' });
+      jsonDb.vet_appointments.push({ id: 1, mareId: 1, date: '2026-06-15', vetName: 'Dr. Smith', reason: 'Pregnancy Check', created_at: new Date().toISOString() });
+      
+      saveJsonDb();
+      res.json({ message: 'Default user + test data created', email: 'admin@horse.com', password: 'horse2026' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Seed endpoint without test data (for quick user only)
+app.get('/api/seed-user', async (req, res) => {
+  const ADMIN_ID = 1778864389096;
+  try {
+    if (usePostgres) {
+      const existing = await pool.query('SELECT id FROM users LIMIT 1');
+      if (existing.rows.length > 0) {
+        return res.json({ message: 'User already exists' });
+      }
+      const hashed = bcrypt.hashSync('horse2026', 10);
+      await pool.query('INSERT INTO users (id, name, email, password) VALUES ($1, $2, $3, $4)', [ADMIN_ID, 'Admin', 'admin@horse.com', hashed]);
+      res.json({ message: 'Default user created', email: 'admin@horse.com', password: 'horse2026' });
+    } else {
+      if (jsonDb.users.length > 0) {
+        return res.json({ message: 'User already exists' });
+      }
+      const hashed = bcrypt.hashSync('horse2026', 10);
+      jsonDb.users.push({ id: ADMIN_ID, name: 'Admin', email: 'admin@horse.com', password: hashed, created_at: new Date().toISOString() });
       saveJsonDb();
       res.json({ message: 'Default user created', email: 'admin@horse.com', password: 'horse2026' });
     }
