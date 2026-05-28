@@ -143,15 +143,15 @@ async function initDb() {
     try {
       await client.query(`
         CREATE TABLE IF NOT EXISTS users (
-          id SERIAL PRIMARY KEY,
+          id BIGSERIAL PRIMARY KEY,
           name VARCHAR(255) NOT NULL,
           email VARCHAR(255) UNIQUE NOT NULL,
           password VARCHAR(255) NOT NULL,
           created_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS mares (
-          id SERIAL PRIMARY KEY,
-          user_id INTEGER REFERENCES users(id),
+          id BIGSERIAL PRIMARY KEY,
+          user_id BIGINT REFERENCES users(id),
           registered_name VARCHAR(255),
           barn_name VARCHAR(255),
           dob DATE,
@@ -159,14 +159,14 @@ async function initDb() {
           created_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS cycles (
-          id SERIAL PRIMARY KEY,
-          mare_id INTEGER REFERENCES mares(id),
+          id BIGSERIAL PRIMARY KEY,
+          mare_id BIGINT REFERENCES mares(id),
           start_date DATE,
           end_date DATE,
           created_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS stallions (
-          id SERIAL PRIMARY KEY,
+          id BIGSERIAL PRIMARY KEY,
           registered_name VARCHAR(255),
           barn_name VARCHAR(255),
           dob DATE,
@@ -174,33 +174,35 @@ async function initDb() {
           created_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS collections (
-          id SERIAL PRIMARY KEY,
-          stallion_id INTEGER REFERENCES stallions(id),
-          mare_id INTEGER REFERENCES mares(id),
-          cycle_id INTEGER REFERENCES cycles(id),
+          id BIGSERIAL PRIMARY KEY,
+          stallion_id BIGINT REFERENCES stallions(id),
+          mare_id BIGINT REFERENCES mares(id),
+          cycle_id BIGINT REFERENCES cycles(id),
           date DATE,
           method VARCHAR(50),
           created_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS mare_breeding (
-          id SERIAL PRIMARY KEY,
-          mare_id INTEGER UNIQUE REFERENCES mares(id),
+          id BIGSERIAL PRIMARY KEY,
+          mare_id BIGINT UNIQUE REFERENCES mares(id),
           breed_dates DATE[],
-          stallion_id INTEGER REFERENCES stallions(id),
+          stallion_id BIGINT REFERENCES stallions(id),
           confirmed_in_foal DATE,
           gestation_date DATE,
+          foal_date DATE,
+          foal_heat_date DATE,
           created_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS stallion_schedule (
-          id SERIAL PRIMARY KEY,
-          stallion_id INTEGER UNIQUE REFERENCES stallions(id),
+          id BIGSERIAL PRIMARY KEY,
+          stallion_id BIGINT UNIQUE REFERENCES stallions(id),
           collection_days INTEGER[],
           created_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS vet_appointments (
-          id SERIAL PRIMARY KEY,
-          mare_id INTEGER REFERENCES mares(id),
-          stallion_id INTEGER REFERENCES stallions(id),
+          id BIGSERIAL PRIMARY KEY,
+          mare_id BIGINT REFERENCES mares(id),
+          stallion_id BIGINT REFERENCES stallions(id),
           date DATE NOT NULL,
           time TIME,
           vet_name VARCHAR(255),
@@ -226,7 +228,7 @@ async function initDb() {
     )`);
     await sqliteRun(`CREATE TABLE IF NOT EXISTS mares (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER,
+      user_id BIGINT,
       registered_name TEXT,
       barn_name TEXT,
       dob TEXT,
@@ -235,7 +237,7 @@ async function initDb() {
     )`);
     await sqliteRun(`CREATE TABLE IF NOT EXISTS cycles (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      mare_id INTEGER,
+      mare_id BIGINT,
       start_date TEXT,
       end_date TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -250,16 +252,16 @@ async function initDb() {
     )`);
     await sqliteRun(`CREATE TABLE IF NOT EXISTS collections (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      stallion_id INTEGER,
-      mare_id INTEGER,
-      cycle_id INTEGER,
+      stallion_id BIGINT,
+      mare_id BIGINT,
+      cycle_id BIGINT,
       date TEXT,
       method TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
     await sqliteRun(`CREATE TABLE IF NOT EXISTS mare_breeding (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      mare_id INTEGER UNIQUE,
+      mare_id BIGINT UNIQUE,
       breed_dates TEXT,
       confirmed_in_foal TEXT,
       gestation_date TEXT,
@@ -267,14 +269,14 @@ async function initDb() {
     )`);
     await sqliteRun(`CREATE TABLE IF NOT EXISTS stallion_schedule (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      stallion_id INTEGER UNIQUE,
+      stallion_id BIGINT UNIQUE,
       collection_days TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
     await sqliteRun(`CREATE TABLE IF NOT EXISTS vet_appointments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      mare_id INTEGER,
-      stallion_id INTEGER,
+      mare_id BIGINT,
+      stallion_id BIGINT,
       date TEXT NOT NULL,
       time TEXT,
       vet_name TEXT,
