@@ -36,6 +36,7 @@ export default function Calendar() {
   const [showBreedingForm, setShowBreedingForm] = useState(false);
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [showVetForm, setShowVetForm] = useState(false);
+  const [selectedEntity, setSelectedEntity] = useState(null); // { type: 'mare'|'stallion', data: object }
   const [mareForm, setMareForm] = useState({
     registeredName: '',
     barnName: '',
@@ -111,11 +112,12 @@ export default function Calendar() {
         for (let d = new Date(now); d <= end; d.setDate(d.getDate() + 1)) {
           if (days.includes(d.getDay())) {
             allEvents.push({
-              title: `${s.barnName || s.registeredName} collection`,
+              title: `${s.name} collection`,
               start: fmt(d),
               allDay: true,
               backgroundColor: stallionColor.backgroundColor,
               borderColor: stallionColor.borderColor,
+              stallionId: s.id,
             });
           }
         }
@@ -136,6 +138,7 @@ export default function Calendar() {
               allDay: true,
               backgroundColor: '#ff9800',
               borderColor: '#f57c00',
+              mareId: m.id,
             });
           });
         }
@@ -149,6 +152,7 @@ export default function Calendar() {
             allDay: true,
             backgroundColor: '#e91e63',
             borderColor: '#c2185b',
+            mareId: m.id,
           });
         });
         // Breeding events (show stallion used)
@@ -163,6 +167,8 @@ export default function Calendar() {
             allDay: true,
             backgroundColor: '#2196f3',
             borderColor: '#1976d2',
+            mareId: m.id,
+            stallionId: breeding.stallionId,
           });
         }
         if (breeding.gestationDate) {
@@ -172,6 +178,7 @@ export default function Calendar() {
             allDay: true,
             backgroundColor: '#9c27b0',
             borderColor: '#7b1fa2',
+            mareId: m.id,
           });
         }
         if (breeding.confirmedInFoal) {
@@ -181,6 +188,7 @@ export default function Calendar() {
             allDay: true,
             backgroundColor: '#00bcd4',
             borderColor: '#0097a7',
+            mareId: m.id,
           });
         }
       }
@@ -197,6 +205,8 @@ export default function Calendar() {
           allDay: true,
           backgroundColor: '#f44336',
           borderColor: '#d32f2f',
+          mareId: v.mare_id,
+          stallionId: v.stallion_id,
         });
       });
 
@@ -532,8 +542,35 @@ export default function Calendar() {
       {showVetForm && (
         <form onSubmit={handleAddVetAppointment} style={{ background: '#fff3e0', padding: '1rem', marginBottom: '1rem' }}>
           <h4>Add Vet Appointment</h4>
-          {/* (form fields omitted for brevity – unchanged) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '0.5rem', marginBottom: '0.5rem' }}>
+            <select value={vetForm.mareId}
+                    onChange={e => setVetForm({ ...vetForm, mareId: e.target.value })}>
+              <option value="">Select Mare (optional)</option>
+              {mares.map(m => <option key={m.id} value={m.id}>{m.registeredName} {m.barnName && `(${m.barnName})`}</option>)}
+            </select>
+            <select value={vetForm.stallionId}
+                    onChange={e => setVetForm({ ...vetForm, stallionId: e.target.value })}>
+              <option value="">Select Stallion (optional)</option>
+              {stallions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '0.5rem', marginBottom: '0.5rem' }}>
+            <input type="date" placeholder="Date" value={vetForm.date}
+                   onChange={e => setVetForm({ ...vetForm, date: e.target.value })} required />
+            <input type="time" placeholder="Time" value={vetForm.time}
+                   onChange={e => setVetForm({ ...vetForm, time: e.target.value })} />
+          </div>
+          <input type="text" placeholder="Vet Name" value={vetForm.vetName}
+                 onChange={e => setVetForm({ ...vetForm, vetName: e.target.value })}
+                 style={{ width: '100%', marginBottom: '0.5rem' }} />
+          <input type="text" placeholder="Reason (e.g., Pregnancy Check)" value={vetForm.reason}
+                 onChange={e => setVetForm({ ...vetForm, reason: e.target.value })}
+                 style={{ width: '100%', marginBottom: '0.5rem' }} />
+          <textarea placeholder="Notes" value={vetForm.notes}
+                 onChange={e => setVetForm({ ...vetForm, notes: e.target.value })}
+                 style={{ width: '100%', marginBottom: '0.5rem' }} />
           <button type="submit" style={{ marginTop: '0.5rem' }}>Add Vet</button>
+          <button type="button" onClick={() => setShowVetForm(false)} style={{ marginLeft: '0.5rem' }}>Cancel</button>
         </form>
       )}
 
@@ -582,14 +619,55 @@ export default function Calendar() {
                        borderLeft: `3px solid ${ev.borderColor}`,
                        overflow: 'hidden',
                        textOverflow: 'ellipsis',
-                       whiteSpace: 'nowrap'
+                       whiteSpace: 'nowrap',
+                       cursor: 'pointer'
                      }}
-                     title={ev.title}>{ev.title}</div>
+                     title={ev.title}
+                     onClick={ev.mareId ? () => {
+                       const mare = mares.find(m => m.id === ev.mareId);
+                       if (mare) setSelectedEntity({ type: 'mare', data: mare });
+                     } : ev.stallionId ? () => {
+                       const stallion = stallions.find(s => s.id === ev.stallionId);
+                       if (stallion) setSelectedEntity({ type: 'stallion', data: stallion });
+                     } : undefined}
+                >{ev.title}</div>
               ))}
             </div>
           );
         })}
       </div>
+
+      {/* Entity Info Modal */}
+      {selectedEntity && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000
+        }} onClick={() => setSelectedEntity(null)}>
+          <div style={{
+            background: 'white', padding: '1.5rem', borderRadius: '12px', maxWidth: '400px', width: '90%',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>
+              {selectedEntity.type === 'mare' ? '🐴 Mare' : '🐎 Stallion'} Info
+            </h3>
+            {selectedEntity.type === 'mare' ? (
+              <div>
+                <p><strong>Registered Name:</strong> {selectedEntity.data.registeredName}</p>
+                {selectedEntity.data.barnName && <p><strong>Barn Name:</strong> {selectedEntity.data.barnName}</p>}
+                {selectedEntity.data.dob && <p><strong>DOB:</strong> {selectedEntity.data.dob}</p>}
+                {selectedEntity.data.registry && <p><strong>Registry:</strong> {selectedEntity.data.registry}</p>}
+              </div>
+            ) : (
+              <div>
+                <p><strong>Name:</strong> {selectedEntity.data.name}</p>
+                {selectedEntity.data.breed && <p><strong>Breed:</strong> {selectedEntity.data.breed}</p>}
+              </div>
+            )}
+            <button onClick={() => setSelectedEntity(null)} style={{ marginTop: '1rem' }}>Close</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
