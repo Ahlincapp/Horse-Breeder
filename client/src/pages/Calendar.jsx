@@ -44,13 +44,14 @@ export default function Calendar() {
     registry: ''
   });
 
-  // **Added stallionId to breedingForm**
+  // **Added stallionId and foalDate to breedingForm**
   const [breedingForm, setBreedingForm] = useState({
     breedDate: '',
     breedDates: [],
     stallionId: '',            // NEW
     confirmedInFoal: '',
-    gestationDate: ''
+    gestationDate: '',
+    foalDate: ''               // NEW - actual foaling date
   });
 
   const [breedingMareId, setBreedingMareId] = useState(null);
@@ -191,6 +192,28 @@ export default function Calendar() {
             mareId: m.id,
           });
         }
+        // Foal date event
+        if (breeding.foalDate) {
+          allEvents.push({
+            title: `${m.barnName || m.registeredName} foaled!`,
+            start: breeding.foalDate,
+            allDay: true,
+            backgroundColor: '#4caf50',
+            borderColor: '#388e3c',
+            mareId: m.id,
+          });
+        }
+        // Foal heat event (rebreed window)
+        if (breeding.foalHeatDate) {
+          allEvents.push({
+            title: `${m.barnName || m.registeredName} foal heat (rebreed)`,
+            start: breeding.foalHeatDate,
+            allDay: true,
+            backgroundColor: '#ff9800',
+            borderColor: '#f57c00',
+            mareId: m.id,
+          });
+        }
       }
 
       // Vet appointments
@@ -231,7 +254,7 @@ export default function Calendar() {
         });
       }
       setMareForm({ registeredName: '', barnName: '', dob: '', registry: '' });
-      setBreedingForm({ breedDate: '', breedDates: [], stallionId: '', confirmedInFoal: '', gestationDate: '' });
+      setBreedingForm({ breedDate: '', breedDates: [], stallionId: '', confirmedInFoal: '', gestationDate: '', foalDate: '' });
       setShowMareForm(false);
       loadData();
     } catch (e) {
@@ -248,7 +271,7 @@ export default function Calendar() {
       });
       setShowBreedingForm(false);
       setBreedingMareId(null);
-      setBreedingForm({ breedDate: '', breedDates: [], stallionId: '', confirmedInFoal: '', gestationDate: '' });
+      setBreedingForm({ breedDate: '', breedDates: [], stallionId: '', confirmedInFoal: '', gestationDate: '', foalDate: '' });
       loadData();
     } catch (e) {
       setError(e.message);
@@ -262,7 +285,7 @@ export default function Calendar() {
         method: 'PUT',
         body: JSON.stringify(editingMare),
       });
-      if (editingMare.breedDate || editingMare.confirmedInFoal || editingMare.gestationDate) {
+      if (editingMare.breedDate || editingMare.confirmedInFoal || editingMare.gestationDate || editingMare.foalDate) {
         await apiFetch(`/api/mares/${editingMare.id}/breeding`, {
           method: 'PUT',
           body: JSON.stringify({
@@ -270,6 +293,7 @@ export default function Calendar() {
             confirmedInFoal: editingMare.confirmedInFoal,
             gestationDate: editingMare.gestationDate,
             stallionId: editingMare.stallionId,
+            foalDate: editingMare.foalDate,
           }),
         });
       }
@@ -447,6 +471,11 @@ export default function Calendar() {
               <input type="date" value={breedingForm.gestationDate}
                      onChange={e => setBreedingForm({ ...breedingForm, gestationDate: e.target.value })} />
             </div>
+            <div style={{ marginBottom: '0.5rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem' }}>Foal Date (Actual Birth)</label>
+              <input type="date" value={breedingForm.foalDate}
+                     onChange={e => setBreedingForm({ ...breedingForm, foalDate: e.target.value })} />
+            </div>
           </div>
 
           <button type="submit" style={{ marginTop: '0.5rem' }}>Add Mare</button>
@@ -531,6 +560,11 @@ export default function Calendar() {
               <label style={{ display: 'block', fontSize: '0.8rem' }}>Gestation Due Date</label>
               <input type="date" style={{ width: '100%' }} value={breedingForm.gestationDate}
                      onChange={e => setBreedingForm({ ...breedingForm, gestationDate: e.target.value })} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem' }}>Foal Date (Actual Birth)</label>
+              <input type="date" style={{ width: '100%' }} value={breedingForm.foalDate}
+                     onChange={e => setBreedingForm({ ...breedingForm, foalDate: e.target.value })} />
             </div>
           </div>
           <button type="submit" style={{ marginTop: '0.5rem' }}>Save Breeding Info</button>

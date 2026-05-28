@@ -11,5 +11,8 @@
   "mares": [],
   "cycles": [],
   "stallions": [],
-  "collections": []
+  "collections": [],
+  "mare_breeding": [],
+  "stallion_schedule": [],
+  "vet_appointments": []
 }
