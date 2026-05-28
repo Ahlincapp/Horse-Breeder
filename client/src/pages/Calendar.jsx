@@ -423,7 +423,7 @@ export default function Calendar() {
 
       {/* Mare Form */}
       {showMareForm && (
-        <form onSubmit={handleAddMare} style={{ background: '#f5f5f5', padding: '1rem', marginBottom: '1rem' }}>
+        <form onSubmit={handleAddMare} style={{ background: '#f5f5f5', padding: '1rem', marginBottom: '1rem' }} noValidate>
           <h4>Add Mare</h4>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '0.5rem' }}>
             <input placeholder="Registered Name" value={mareForm.registeredName}
@@ -484,7 +484,7 @@ export default function Calendar() {
 
       {/* Stallion Form */}
       {showStallionForm && (
-        <form onSubmit={handleAddStallion} style={{ background: '#f5f5f5', padding: '1rem', marginBottom: '1rem' }}>
+        <form onSubmit={handleAddStallion} style={{ background: '#f5f5f5', padding: '1rem', marginBottom: '1rem' }} noValidate>
           <h4>Add Stallion</h4>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '0.5rem' }}>
             <input placeholder="Registered Name" value={stallionForm.registeredName}
@@ -505,7 +505,7 @@ export default function Calendar() {
 
       {/* Cycle Form */}
       {showCycleForm && (
-        <form onSubmit={handleAddCycle} style={{ background: '#fce4ec', padding: '1rem', marginBottom: '1rem' }}>
+        <form onSubmit={handleAddCycle} style={{ background: '#fce4ec', padding: '1rem', marginBottom: '1rem' }} noValidate>
           <h4>Add Heat Cycle</h4>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.5rem' }}>
             <select value={cycleForm.mareId}
@@ -524,7 +524,7 @@ export default function Calendar() {
 
       {/* Breeding Info Form */}
       {showBreedingForm && (
-        <form onSubmit={handleAddBreeding} style={{ background: '#e3f2fd', padding: '1rem', marginBottom: '1rem' }}>
+        <form onSubmit={handleAddBreeding} style={{ background: '#e3f2fd', padding: '1rem', marginBottom: '1rem' }} noValidate>
           <h4>Set Breeding Info</h4>
           {breedingForm.breedDates && breedingForm.breedDates.length > 0 && (
             <div style={{ marginBottom: '0.5rem' }}>
@@ -574,7 +574,7 @@ export default function Calendar() {
 
       {/* Vet Form */}
       {showVetForm && (
-        <form onSubmit={handleAddVetAppointment} style={{ background: '#fff3e0', padding: '1rem', marginBottom: '1rem' }}>
+        <form onSubmit={handleAddVetAppointment} style={{ background: '#fff3e0', padding: '1rem', marginBottom: '1rem' }} noValidate>
           <h4>Add Vet Appointment</h4>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '0.5rem', marginBottom: '0.5rem' }}>
             <select value={vetForm.mareId}
