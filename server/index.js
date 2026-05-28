@@ -135,7 +135,10 @@ function dbDelete(table, id) {
 async function initDb() {
   if (usePostgres) {
     const { Pool } = require('pg');
-    pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    pool = new Pool({ 
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false }
+    });
     const client = await pool.connect();
     try {
       await client.query(`
