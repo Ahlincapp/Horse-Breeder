@@ -301,10 +301,39 @@ function generateToken(user) {
 
 // Middleware: protect routes - bypass auth for now (temp fix)
 function authMiddleware(req, res, next) {
-  // TEMP: Skip auth and use default user
+  // TEMP: Use default user from database
   // TODO: Fix auth properly
-  req.user = { id: 1778864389096, name: 'Admin', email: 'admin@horse.com' };
-  return next();
+  if (usePostgres) {
+    pool.query('SELECT id FROM users WHERE email = $1 LIMIT 1', ['admin@horse.com'])
+      .then(result => {
+        if (result.rows.length > 0) {
+          req.user = { id: result.rows[0].id, name: 'Admin', email: 'admin@horse.com' };
+          next();
+        } else {
+          // Fallback: create default user if none exists
+          const hashed = bcrypt.hashSync('horse2026', 10);
+          pool.query('INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id', ['Admin', 'admin@horse.com', hashed])
+            .then(result => {
+              req.user = { id: result.rows[0].id, name: 'Admin', email: 'admin@horse.com' };
+              next();
+            })
+            .catch(() => res.status(500).json({ error: 'Failed to create default user' }));
+        }
+      })
+      .catch(() => res.status(500).json({ error: 'Auth error' }));
+  } else {
+    // JSON mode
+    if (db.users.length > 0) {
+      req.user = db.users[0];
+    } else {
+      const hashed = bcrypt.hashSync('horse2026', 10);
+      const user = { id: Date.now(), name: 'Admin', email: 'admin@horse.com', password: hashed, created_at: new Date().toISOString() };
+      db.users.push(user);
+      req.user = user;
+    }
+    next();
+  }
+}
   
   /* Original auth code:
   const authHeader = req.headers.authorization;
