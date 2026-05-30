@@ -41,7 +41,8 @@ export default function Calendar() {
     registeredName: '',
     barnName: '',
     dob: '',
-    registry: ''
+    registry: '',
+    registrationNumber: ''
   });
 
   // **Added stallionId and foalDate to breedingForm**
@@ -59,8 +60,12 @@ export default function Calendar() {
     registeredName: '',
     barnName: '',
     dob: '',
-    registry: ''
+    registry: '',
+    registrationNumber: '',
+    semenType: ''
   });
+
+  const SEMEN_TYPES = ['Fresh', 'Cooled', 'Frozen', 'Live Cover'];
   const [cycleForm, setCycleForm] = useState({
     mareId: '',
     startDate: '',
@@ -253,7 +258,7 @@ export default function Calendar() {
           body: JSON.stringify(breedingForm),
         });
       }
-      setMareForm({ registeredName: '', barnName: '', dob: '', registry: '' });
+      setMareForm({ registeredName: '', barnName: '', dob: '', registry: '', registrationNumber: '' });
       setBreedingForm({ breedDate: '', breedDates: [], stallionId: '', confirmedInFoal: '', gestationDate: '', foalDate: '' });
       setShowMareForm(false);
       loadData();
@@ -312,7 +317,7 @@ export default function Calendar() {
         method: 'POST',
         body: JSON.stringify(stallionForm),
       });
-      setStallionForm({ registeredName: '', barnName: '', dob: '', registry: '' });
+      setStallionForm({ registeredName: '', barnName: '', dob: '', registry: '', registrationNumber: '', semenType: '' });
       setShowStallionForm(false);
       loadData();
     } catch (e) {
@@ -437,6 +442,8 @@ export default function Calendar() {
               <option value="">Select Registry</option>
               {REGISTRIES.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
+            <input placeholder="Registration Number" value={mareForm.registrationNumber}
+                   onChange={e => setMareForm({ ...mareForm, registrationNumber: e.target.value })} />
           </div>
 
           {/* Optional breeding info while creating the mare */}
@@ -497,6 +504,13 @@ export default function Calendar() {
                     onChange={e => setStallionForm({ ...stallionForm, registry: e.target.value })} required>
               <option value="">Select Registry</option>
               {REGISTRIES.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <input placeholder="Registration Number" value={stallionForm.registrationNumber}
+                   onChange={e => setStallionForm({ ...stallionForm, registrationNumber: e.target.value })} />
+            <select value={stallionForm.semenType}
+                    onChange={e => setStallionForm({ ...stallionForm, semenType: e.target.value })}>
+              <option value="">Select Semen Type</option>
+              {SEMEN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
           <button type="submit" style={{ marginTop: '0.5rem' }}>Add Stallion</button>

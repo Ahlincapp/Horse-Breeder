@@ -156,6 +156,7 @@ async function initDb() {
           barn_name VARCHAR(255),
           dob DATE,
           registry VARCHAR(255),
+          registration_number VARCHAR(100),
           created_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS cycles (
@@ -171,6 +172,8 @@ async function initDb() {
           barn_name VARCHAR(255),
           dob DATE,
           registry VARCHAR(255),
+          registration_number VARCHAR(100),
+          semen_type VARCHAR(50),
           created_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS collections (
@@ -180,6 +183,7 @@ async function initDb() {
           cycle_id BIGINT REFERENCES cycles(id),
           date DATE,
           method VARCHAR(50),
+          registration_number VARCHAR(100),
           created_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS mare_breeding (
@@ -233,6 +237,7 @@ async function initDb() {
       barn_name TEXT,
       dob TEXT,
       registry TEXT,
+      registration_number TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
     await sqliteRun(`CREATE TABLE IF NOT EXISTS cycles (
@@ -248,6 +253,8 @@ async function initDb() {
       barn_name TEXT,
       dob TEXT,
       registry TEXT,
+      registration_number TEXT,
+      semen_type TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
     await sqliteRun(`CREATE TABLE IF NOT EXISTS collections (
@@ -257,6 +264,7 @@ async function initDb() {
       cycle_id BIGINT,
       date TEXT,
       method TEXT,
+      registration_number TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
     await sqliteRun(`CREATE TABLE IF NOT EXISTS mare_breeding (
@@ -422,7 +430,7 @@ app.get('/api/mares', authMiddleware, async (req, res) => {
   try {
     if (usePostgres) {
       const result = await pool.query('SELECT * FROM mares WHERE user_id = $1', [req.user.id]);
-      res.json(result.rows.map(m => ({ id: m.id, userId: m.user_id, registeredName: m.registered_name, barnName: m.barn_name, dob: m.dob, registry: m.registry })));
+      res.json(result.rows.map(m => ({ id: m.id, userId: m.user_id, registeredName: m.registered_name, barnName: m.barn_name, dob: m.dob, registry: m.registry, registrationNumber: m.registration_number })));
     } else {
       const mares = db.mares.filter(m => m.userId === req.user.id);
       res.json(mares);
@@ -433,17 +441,17 @@ app.get('/api/mares', authMiddleware, async (req, res) => {
 });
 
 app.post('/api/mares', authMiddleware, async (req, res) => {
-  const { registeredName, barnName, dob, registry } = req.body;
+  const { registeredName, barnName, dob, registry, registrationNumber } = req.body;
   try {
     if (usePostgres) {
       const result = await pool.query(
-        'INSERT INTO mares (user_id, registered_name, barn_name, dob, registry) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [req.user.id, registeredName, barnName || null, dob, registry || null]
+        'INSERT INTO mares (user_id, registered_name, barn_name, dob, registry, registration_number) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+        [req.user.id, registeredName, barnName || null, dob, registry || null, registrationNumber || null]
       );
       const mare = result.rows[0];
-      res.json({ id: mare.id, userId: mare.user_id, registeredName: mare.registered_name, barnName: mare.barn_name, dob: mare.dob, registry: mare.registry });
+      res.json({ id: mare.id, userId: mare.user_id, registeredName: mare.registered_name, barnName: mare.barn_name, dob: mare.dob, registry: mare.registry, registrationNumber: mare.registration_number });
     } else {
-      const mare = { id: Date.now(), userId: req.user.id, registeredName, barnName: barnName || null, dob, registry: registry || null, created_at: new Date().toISOString() };
+      const mare = { id: Date.now(), userId: req.user.id, registeredName, barnName: barnName || null, dob, registry: registry || null, registrationNumber: registrationNumber || null, created_at: new Date().toISOString() };
       db.mares.push(mare);
       saveJsonDb();
       res.json(mare);
@@ -455,19 +463,19 @@ app.post('/api/mares', authMiddleware, async (req, res) => {
 
 app.put('/api/mares/:mareId', authMiddleware, async (req, res) => {
   const { mareId } = req.params;
-  const { registeredName, barnName, dob, registry } = req.body;
+  const { registeredName, barnName, dob, registry, registrationNumber } = req.body;
   try {
     if (usePostgres) {
       const result = await pool.query(
-        'UPDATE mares SET registered_name = $1, barn_name = $2, dob = $3, registry = $4 WHERE id = $5 RETURNING *',
-        [registeredName, barnName || null, dob, registry || null, mareId]
+        'UPDATE mares SET registered_name = $1, barn_name = $2, dob = $3, registry = $4, registration_number = $5 WHERE id = $6 RETURNING *',
+        [registeredName, barnName || null, dob, registry || null, registrationNumber || null, mareId]
       );
       const mare = result.rows[0];
-      res.json({ id: mare.id, userId: mare.user_id, registeredName: mare.registered_name, barnName: mare.barn_name, dob: mare.dob, registry: mare.registry });
+      res.json({ id: mare.id, userId: mare.user_id, registeredName: mare.registered_name, barnName: mare.barn_name, dob: mare.dob, registry: mare.registry, registrationNumber: mare.registration_number });
     } else {
       const idx = db.mares.findIndex(m => m.id === parseInt(mareId));
       if (idx === -1) return res.status(404).json({ error: 'Mare not found' });
-      db.mares[idx] = { ...db.mares[idx], registeredName, barnName: barnName || null, dob, registry: registry || null };
+      db.mares[idx] = { ...db.mares[idx], registeredName, barnName: barnName || null, dob, registry: registry || null, registrationNumber: registrationNumber || null };
       saveJsonDb();
       res.json(db.mares[idx]);
     }
@@ -829,17 +837,17 @@ app.delete('/api/cycles/:cycleId', authMiddleware, async (req, res) => {
 
 // ---------- Stallion routes (protected) ----------
 app.post('/api/stallions', authMiddleware, async (req, res) => {
-  const { registeredName, barnName, dob, registry } = req.body;
+  const { registeredName, barnName, dob, registry, registrationNumber, semenType } = req.body;
   try {
     if (usePostgres) {
       const result = await pool.query(
-        'INSERT INTO stallions (registered_name, barn_name, dob, registry) VALUES ($1, $2, $3, $4) RETURNING *',
-        [registeredName, barnName || null, dob, registry || null]
+        'INSERT INTO stallions (registered_name, barn_name, dob, registry, registration_number, semen_type) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+        [registeredName, barnName || null, dob, registry || null, registrationNumber || null, semenType || null]
       );
       const s = result.rows[0];
-      res.json({ id: s.id, registeredName: s.registered_name, barnName: s.barn_name, dob: s.dob, registry: s.registry });
+      res.json({ id: s.id, registeredName: s.registered_name, barnName: s.barn_name, dob: s.dob, registry: s.registry, registrationNumber: s.registration_number, semenType: s.semen_type });
     } else {
-      const stallion = { id: Date.now(), registeredName, barnName: barnName || null, dob, registry: registry || null, created_at: new Date().toISOString() };
+      const stallion = { id: Date.now(), registeredName, barnName: barnName || null, dob, registry: registry || null, registrationNumber: registrationNumber || null, semenType: semenType || null, created_at: new Date().toISOString() };
       db.stallions.push(stallion);
       saveJsonDb();
       res.json(stallion);
@@ -853,7 +861,7 @@ app.get('/api/stallions', authMiddleware, async (req, res) => {
   try {
     if (usePostgres) {
       const result = await pool.query('SELECT * FROM stallions');
-      res.json(result.rows.map(s => ({ id: s.id, registeredName: s.registered_name, barnName: s.barn_name, dob: s.dob, registry: s.registry })));
+      res.json(result.rows.map(s => ({ id: s.id, registeredName: s.registered_name, barnName: s.barn_name, dob: s.dob, registry: s.registry, registrationNumber: s.registration_number, semenType: s.semen_type })));
     } else {
       res.json(db.stallions);
     }
@@ -864,19 +872,19 @@ app.get('/api/stallions', authMiddleware, async (req, res) => {
 
 app.put('/api/stallions/:stallionId', authMiddleware, async (req, res) => {
   const { stallionId } = req.params;
-  const { registeredName, barnName, dob, registry } = req.body;
+  const { registeredName, barnName, dob, registry, registrationNumber, semenType } = req.body;
   try {
     if (usePostgres) {
       const result = await pool.query(
-        'UPDATE stallions SET registered_name = $1, barn_name = $2, dob = $3, registry = $4 WHERE id = $5 RETURNING *',
-        [registeredName, barnName || null, dob, registry || null, stallionId]
+        'UPDATE stallions SET registered_name = $1, barn_name = $2, dob = $3, registry = $4, registration_number = $5, semen_type = $6 WHERE id = $7 RETURNING *',
+        [registeredName, barnName || null, dob, registry || null, registrationNumber || null, semenType || null, stallionId]
       );
       const s = result.rows[0];
-      res.json({ id: s.id, registeredName: s.registered_name, barnName: s.barn_name, dob: s.dob, registry: s.registry });
+      res.json({ id: s.id, registeredName: s.registered_name, barnName: s.barn_name, dob: s.dob, registry: s.registry, registrationNumber: s.registration_number, semenType: s.semen_type });
     } else {
       const idx = db.stallions.findIndex(s => s.id === parseInt(stallionId));
       if (idx === -1) return res.status(404).json({ error: 'Stallion not found' });
-      db.stallions[idx] = { ...db.stallions[idx], registeredName, barnName: barnName || null, dob, registry: registry || null };
+      db.stallions[idx] = { ...db.stallions[idx], registeredName, barnName: barnName || null, dob, registry: registry || null, registrationNumber: registrationNumber || null, semenType: semenType || null };
       saveJsonDb();
       res.json(db.stallions[idx]);
     }
@@ -924,12 +932,23 @@ app.post('/api/collections', authMiddleware, async (req, res) => {
 app.get('/api/stallions/:id/report', authMiddleware, async (req, res) => {
   const stallionId = req.params.id;
   try {
+    // Get stallion info
+    let stallion = null;
     if (usePostgres) {
-      const result = await pool.query('SELECT * FROM collections WHERE stallion_id = $1', [stallionId]);
-      res.json({ stallionId, collections: result.rows });
+      const stallionResult = await pool.query('SELECT * FROM stallions WHERE id = $1', [stallionId]);
+      if (stallionResult.rows.length > 0) {
+        const s = stallionResult.rows[0];
+        stallion = { id: s.id, registeredName: s.registered_name, barnName: s.barn_name, registry: s.registry, registrationNumber: s.registration_number, semenType: s.semen_type };
+      }
+      const result = await pool.query('SELECT c.*, m.registered_name as mare_name, m.registration_number as mare_reg FROM collections c LEFT JOIN mares m ON c.mare_id = m.id WHERE c.stallion_id = $1', [stallionId]);
+      res.json({ stallion, collections: result.rows });
     } else {
-      const collections = db.collections.filter(c => c.stallionId === parseInt(stallionId));
-      res.json({ stallionId, collections });
+      stallion = db.stallions.find(s => s.id === parseInt(stallionId));
+      const collections = db.collections.filter(c => c.stallionId === parseInt(stallionId)).map(c => {
+        const mare = db.mares.find(m => m.id === c.mareId);
+        return { ...c, mareName: mare?.registeredName, mareRegistrationNumber: mare?.registrationNumber };
+      });
+      res.json({ stallion, collections });
     }
   } catch (err) {
     res.status(500).json({ error: err.message });

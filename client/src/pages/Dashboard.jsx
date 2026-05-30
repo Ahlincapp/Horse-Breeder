@@ -23,10 +23,12 @@ export default function Dashboard() {
   const [collections, setCollections] = useState([]);
 
   // Form state
-  const [mareForm, setMareForm] = useState({ registeredName: '', barnName: '', dob: '', registry: '' });
+  const [mareForm, setMareForm] = useState({ registeredName: '', barnName: '', dob: '', registry: '', registrationNumber: '' });
   const [editingMare, setEditingMare] = useState(null);
-  const [stallionForm, setStallionForm] = useState({ registeredName: '', barnName: '', dob: '', registry: '' });
+  const [stallionForm, setStallionForm] = useState({ registeredName: '', barnName: '', dob: '', registry: '', registrationNumber: '', semenType: '' });
   const [editingStallion, setEditingStallion] = useState(null);
+
+  const SEMEN_TYPES = ['Fresh', 'Cooled', 'Frozen', 'Live Cover'];
   const [cycleForm, setCycleForm] = useState({ mareId: '', startDate: '', endDate: '' });
   const [collectionForm, setCollectionForm] = useState({
     stallionId: '',
@@ -80,7 +82,7 @@ export default function Dashboard() {
         method: 'POST',
         body: JSON.stringify(mareForm),
       });
-      setMareForm({ registeredName: '', barnName: '', dob: '', registry: '' });
+      setMareForm({ registeredName: '', barnName: '', dob: '', registry: '', registrationNumber: '' });
       loadMares();
     } catch (e) {
       setError(e.message);
@@ -121,7 +123,7 @@ export default function Dashboard() {
         method: 'POST',
         body: JSON.stringify(stallionForm),
       });
-      setStallionForm({ registeredName: '', barnName: '', dob: '', registry: '' });
+      setStallionForm({ registeredName: '', barnName: '', dob: '', registry: '', registrationNumber: '', semenType: '' });
       loadStallions();
     } catch (e) {
       setError(e.message);
@@ -223,6 +225,7 @@ export default function Dashboard() {
               {m.barnName && <span> ({m.barnName})</span>}
               <span> — DOB: {m.dob}</span>
               {m.registry && <span> — {m.registry}</span>}
+              {m.registrationNumber && <span> — Reg#: {m.registrationNumber}</span>}
               <button style={{ marginLeft: '0.5rem' }} onClick={() => loadCycles(m.id)}>View Cycles</button>
               <button style={{ marginLeft: '0.5rem' }} onClick={() => setEditingMare(m)}>Edit</button>
               <button style={{ marginLeft: '0.5rem', color: 'red' }} onClick={() => handleDeleteMare(m.id)}>Delete</button>
@@ -239,6 +242,7 @@ export default function Dashboard() {
               <option value="">Select Registry</option>
               {REGISTRIES.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
+            <input placeholder="Registration Number" value={editingMare.registrationNumber || ''} onChange={(e) => setEditingMare({ ...editingMare, registrationNumber: e.target.value })} />
             <button type="submit">Save</button>
             <button type="button" onClick={() => setEditingMare(null)} style={{ marginLeft: '0.5rem' }}>Cancel</button>
           </form>
@@ -252,6 +256,7 @@ export default function Dashboard() {
               <option value="">Select Registry</option>
               {REGISTRIES.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
+            <input placeholder="Registration Number" value={mareForm.registrationNumber} onChange={(e) => setMareForm({ ...mareForm, registrationNumber: e.target.value })} />
             <button type="submit">Add Mare</button>
           </form>
         )}
@@ -267,6 +272,8 @@ export default function Dashboard() {
               {s.barnName && <span> ({s.barnName})</span>}
               <span> — DOB: {s.dob}</span>
               {s.registry && <span> — {s.registry}</span>}
+              {s.registrationNumber && <span> — Reg#: {s.registrationNumber}</span>}
+              {s.semenType && <span> — {s.semenType}</span>}
               <button style={{ marginLeft: '0.5rem' }} onClick={() => setEditingStallion(s)}>Edit</button>
               <button style={{ marginLeft: '0.5rem', color: 'red' }} onClick={() => handleDeleteStallion(s.id)}>Delete</button>
             </li>
@@ -282,6 +289,11 @@ export default function Dashboard() {
               <option value="">Select Registry</option>
               {REGISTRIES.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
+            <input placeholder="Registration Number" value={editingStallion.registrationNumber || ''} onChange={(e) => setEditingStallion({ ...editingStallion, registrationNumber: e.target.value })} />
+            <select value={editingStallion.semenType || ''} onChange={(e) => setEditingStallion({ ...editingStallion, semenType: e.target.value })}>
+              <option value="">Select Semen Type</option>
+              {SEMEN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
             <button type="submit">Save</button>
             <button type="button" onClick={() => setEditingStallion(null)} style={{ marginLeft: '0.5rem' }}>Cancel</button>
           </form>
@@ -294,6 +306,11 @@ export default function Dashboard() {
             <select value={stallionForm.registry} onChange={(e) => setStallionForm({ ...stallionForm, registry: e.target.value })} required>
               <option value="">Select Registry</option>
               {REGISTRIES.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <input placeholder="Registration Number" value={stallionForm.registrationNumber} onChange={(e) => setStallionForm({ ...stallionForm, registrationNumber: e.target.value })} />
+            <select value={stallionForm.semenType} onChange={(e) => setStallionForm({ ...stallionForm, semenType: e.target.value })}>
+              <option value="">Select Semen Type</option>
+              {SEMEN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
             <button type="submit">Add Stallion</button>
           </form>
