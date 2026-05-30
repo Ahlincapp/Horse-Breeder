@@ -29,6 +29,9 @@ export default function Dashboard() {
   const [editingStallion, setEditingStallion] = useState(null);
 
   const SEMEN_TYPES = ['Fresh', 'Cooled', 'Frozen', 'Live Cover'];
+  const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const [stallionSchedules, setStallionSchedules] = useState({}); // { stallionId: [0,1,2...] }
+  const [editingSchedule, setEditingSchedule] = useState(null); // stallion being edited
   const [cycleForm, setCycleForm] = useState({ mareId: '', startDate: '', endDate: '' });
   const [collectionForm, setCollectionForm] = useState({
     stallionId: '',
@@ -59,6 +62,29 @@ export default function Dashboard() {
     try {
       const data = await apiFetch('/api/stallions');
       setStallions(data);
+      // Load schedule for each stallion
+      const schedules = {};
+      for (const s of data) {
+        try {
+          const sched = await apiFetch(`/api/stallions/${s.id}/schedule`);
+          schedules[s.id] = sched.days || [];
+        } catch {
+          schedules[s.id] = [];
+        }
+      }
+      setStallionSchedules(schedules);
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handleSaveSchedule = async (stallionId) => {
+    try {
+      await apiFetch(`/api/stallions/${stallionId}/schedule`, {
+        method: 'PUT',
+        body: JSON.stringify({ days: stallionSchedules[stallionId] || [] }),
+      });
+      setEditingSchedule(null);
     } catch (e) {
       setError(e.message);
     }
@@ -275,6 +301,7 @@ export default function Dashboard() {
               {s.registrationNumber && <span> — Reg#: {s.registrationNumber}</span>}
               {s.semenType && <span> — {s.semenType}</span>}
               <button style={{ marginLeft: '0.5rem' }} onClick={() => setEditingStallion(s)}>Edit</button>
+              <button style={{ marginLeft: '0.5rem' }} onClick={() => setEditingSchedule(s.id)}>Schedule</button>
               <button style={{ marginLeft: '0.5rem', color: 'red' }} onClick={() => handleDeleteStallion(s.id)}>Delete</button>
             </li>
           ))}
@@ -314,6 +341,34 @@ export default function Dashboard() {
             </select>
             <button type="submit">Add Stallion</button>
           </form>
+        )}
+
+        {/* Stallion Schedule Editor */}
+        {editingSchedule && (
+          <div style={{ background: '#e8f5e9', padding: '1rem', marginTop: '1rem' }}>
+            <h4>Collection Days for {stallions.find(s => s.id === editingSchedule)?.registeredName}</h4>
+            <p style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}>Select days of the week for collection:</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+              {DAYS_OF_WEEK.map((day, idx) => (
+                <label key={day} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={(stallionSchedules[editingSchedule] || []).includes(idx)}
+                    onChange={(e) => {
+                      const current = stallionSchedules[editingSchedule] || [];
+                      const updated = e.target.checked
+                        ? [...current, idx]
+                        : current.filter(d => d !== idx);
+                      setStallionSchedules({ ...stallionSchedules, [editingSchedule]: updated });
+                    }}
+                  />
+                  {day}
+                </label>
+              ))}
+            </div>
+            <button onClick={() => handleSaveSchedule(editingSchedule)}>Save Schedule</button>
+            <button onClick={() => setEditingSchedule(null)} style={{ marginLeft: '0.5rem' }}>Cancel</button>
+          </div>
         )}
       </section>
 
