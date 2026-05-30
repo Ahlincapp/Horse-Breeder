@@ -347,7 +347,6 @@ function authMiddleware(req, res, next) {
     return res.status(401).json({ error: 'Invalid token' });
   }
   */
-}
 
 // ---------- Auth routes ----------
 app.post('/api/register', async (req, res) => {
