@@ -113,7 +113,7 @@ export default function Calendar() {
         for (let d = new Date(now); d <= end; d.setDate(d.getDate() + 1)) {
           if (days.includes(d.getDay())) {
             allEvents.push({
-              title: `${s.name} collection`,
+              title: `${s.registeredName || s.barnName} collection`,
               start: fmt(d),
               allDay: true,
               backgroundColor: stallionColor.backgroundColor,
@@ -585,7 +585,7 @@ export default function Calendar() {
             <select value={vetForm.stallionId}
                     onChange={e => setVetForm({ ...vetForm, stallionId: e.target.value })}>
               <option value="">Select Stallion (optional)</option>
-              {stallions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {stallions.map(s => <option key={s.id} value={s.id}>{s.barnName || s.registeredName}</option>)}
             </select>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '0.5rem', marginBottom: '0.5rem' }}>
