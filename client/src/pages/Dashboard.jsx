@@ -23,9 +23,9 @@ export default function Dashboard() {
   const [collections, setCollections] = useState([]);
 
   // Form state
-  const [mareForm, setMareForm] = useState({ registeredName: '', barnName: '', dob: '', registry: '', registrationNumber: '' });
+  const [mareForm, setMareForm] = useState({ registeredName: '', barnName: '', dob: '', registry: '', registrationNumber: '', ownerName: '', ownerPhone: '', ownerEmail: '', vetName: '', vetPhone: '', vetEmail: '' });
   const [editingMare, setEditingMare] = useState(null);
-  const [stallionForm, setStallionForm] = useState({ registeredName: '', barnName: '', dob: '', registry: '', registrationNumber: '', semenType: '' });
+  const [stallionForm, setStallionForm] = useState({ registeredName: '', barnName: '', dob: '', registry: '', registrationNumber: '', semenType: '', breederName: '', breederPhone: '', breederEmail: '', vetName: '', vetPhone: '', vetEmail: '' });
   const [editingStallion, setEditingStallion] = useState(null);
 
   const SEMEN_TYPES = ['Fresh', 'Cooled', 'Frozen', 'Live Cover'];
@@ -108,7 +108,7 @@ export default function Dashboard() {
         method: 'POST',
         body: JSON.stringify(mareForm),
       });
-      setMareForm({ registeredName: '', barnName: '', dob: '', registry: '', registrationNumber: '' });
+      setMareForm({ registeredName: '', barnName: '', dob: '', registry: '', registrationNumber: '', ownerName: '', ownerPhone: '', ownerEmail: '', vetName: '', vetPhone: '', vetEmail: '' });
       loadMares();
     } catch (e) {
       setError(e.message);
@@ -149,7 +149,7 @@ export default function Dashboard() {
         method: 'POST',
         body: JSON.stringify(stallionForm),
       });
-      setStallionForm({ registeredName: '', barnName: '', dob: '', registry: '', registrationNumber: '', semenType: '' });
+      setStallionForm({ registeredName: '', barnName: '', dob: '', registry: '', registrationNumber: '', semenType: '', breederName: '', breederPhone: '', breederEmail: '', vetName: '', vetPhone: '', vetEmail: '' });
       loadStallions();
     } catch (e) {
       setError(e.message);
@@ -269,6 +269,16 @@ export default function Dashboard() {
               {REGISTRIES.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
             <input placeholder="Registration Number" value={editingMare.registrationNumber || ''} onChange={(e) => setEditingMare({ ...editingMare, registrationNumber: e.target.value })} />
+            <hr style={{ margin: '1rem 0', opacity: 0.3 }} />
+            <h5 style={{ margin: '0 0 0.5rem 0' }}>Owner Contact</h5>
+            <input placeholder="Owner Name" value={editingMare.ownerName || ''} onChange={(e) => setEditingMare({ ...editingMare, ownerName: e.target.value })} />
+            <input placeholder="Owner Phone" value={editingMare.ownerPhone || ''} onChange={(e) => setEditingMare({ ...editingMare, ownerPhone: e.target.value })} />
+            <input placeholder="Owner Email" type="email" value={editingMare.ownerEmail || ''} onChange={(e) => setEditingMare({ ...editingMare, ownerEmail: e.target.value })} />
+            <hr style={{ margin: '1rem 0', opacity: 0.3 }} />
+            <h5 style={{ margin: '0 0 0.5rem 0' }}>Veterinarian Info</h5>
+            <input placeholder="Vet Name" value={editingMare.vetName || ''} onChange={(e) => setEditingMare({ ...editingMare, vetName: e.target.value })} />
+            <input placeholder="Vet Phone" value={editingMare.vetPhone || ''} onChange={(e) => setEditingMare({ ...editingMare, vetPhone: e.target.value })} />
+            <input placeholder="Vet Email" type="email" value={editingMare.vetEmail || ''} onChange={(e) => setEditingMare({ ...editingMare, vetEmail: e.target.value })} />
             <button type="submit">Save</button>
             <button type="button" onClick={() => setEditingMare(null)} style={{ marginLeft: '0.5rem' }}>Cancel</button>
           </form>
@@ -283,6 +293,16 @@ export default function Dashboard() {
               {REGISTRIES.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
             <input placeholder="Registration Number" value={mareForm.registrationNumber} onChange={(e) => setMareForm({ ...mareForm, registrationNumber: e.target.value })} />
+            <hr style={{ margin: '1rem 0', opacity: 0.3 }} />
+            <h5 style={{ margin: '0 0 0.5rem 0' }}>Owner Contact</h5>
+            <input placeholder="Owner Name" value={mareForm.ownerName} onChange={(e) => setMareForm({ ...mareForm, ownerName: e.target.value })} />
+            <input placeholder="Owner Phone" value={mareForm.ownerPhone} onChange={(e) => setMareForm({ ...mareForm, ownerPhone: e.target.value })} />
+            <input placeholder="Owner Email" type="email" value={mareForm.ownerEmail} onChange={(e) => setMareForm({ ...mareForm, ownerEmail: e.target.value })} />
+            <hr style={{ margin: '1rem 0', opacity: 0.3 }} />
+            <h5 style={{ margin: '0 0 0.5rem 0' }}>Veterinarian Info</h5>
+            <input placeholder="Vet Name" value={mareForm.vetName} onChange={(e) => setMareForm({ ...mareForm, vetName: e.target.value })} />
+            <input placeholder="Vet Phone" value={mareForm.vetPhone} onChange={(e) => setMareForm({ ...mareForm, vetPhone: e.target.value })} />
+            <input placeholder="Vet Email" type="email" value={mareForm.vetEmail} onChange={(e) => setMareForm({ ...mareForm, vetEmail: e.target.value })} />
             <button type="submit">Add Mare</button>
           </form>
         )}
@@ -321,6 +341,16 @@ export default function Dashboard() {
               <option value="">Select Semen Type</option>
               {SEMEN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
+            <hr style={{ margin: '1rem 0', opacity: 0.3 }} />
+            <h5 style={{ margin: '0 0 0.5rem 0' }}>Breeder Contact (for semen shipping)</h5>
+            <input placeholder="Breeder Name" value={editingStallion.breederName || ''} onChange={(e) => setEditingStallion({ ...editingStallion, breederName: e.target.value })} />
+            <input placeholder="Breeder Phone" value={editingStallion.breederPhone || ''} onChange={(e) => setEditingStallion({ ...editingStallion, breederPhone: e.target.value })} />
+            <input placeholder="Breeder Email" type="email" value={editingStallion.breederEmail || ''} onChange={(e) => setEditingStallion({ ...editingStallion, breederEmail: e.target.value })} />
+            <hr style={{ margin: '1rem 0', opacity: 0.3 }} />
+            <h5 style={{ margin: '0 0 0.5rem 0' }}>Veterinarian Info</h5>
+            <input placeholder="Vet Name" value={editingStallion.vetName || ''} onChange={(e) => setEditingStallion({ ...editingStallion, vetName: e.target.value })} />
+            <input placeholder="Vet Phone" value={editingStallion.vetPhone || ''} onChange={(e) => setEditingStallion({ ...editingStallion, vetPhone: e.target.value })} />
+            <input placeholder="Vet Email" type="email" value={editingStallion.vetEmail || ''} onChange={(e) => setEditingStallion({ ...editingStallion, vetEmail: e.target.value })} />
             <button type="submit">Save</button>
             <button type="button" onClick={() => setEditingStallion(null)} style={{ marginLeft: '0.5rem' }}>Cancel</button>
           </form>
@@ -339,6 +369,16 @@ export default function Dashboard() {
               <option value="">Select Semen Type</option>
               {SEMEN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
+            <hr style={{ margin: '1rem 0', opacity: 0.3 }} />
+            <h5 style={{ margin: '0 0 0.5rem 0' }}>Breeder Contact (for semen shipping)</h5>
+            <input placeholder="Breeder Name" value={stallionForm.breederName} onChange={(e) => setStallionForm({ ...stallionForm, breederName: e.target.value })} />
+            <input placeholder="Breeder Phone" value={stallionForm.breederPhone} onChange={(e) => setStallionForm({ ...stallionForm, breederPhone: e.target.value })} />
+            <input placeholder="Breeder Email" type="email" value={stallionForm.breederEmail} onChange={(e) => setStallionForm({ ...stallionForm, breederEmail: e.target.value })} />
+            <hr style={{ margin: '1rem 0', opacity: 0.3 }} />
+            <h5 style={{ margin: '0 0 0.5rem 0' }}>Veterinarian Info</h5>
+            <input placeholder="Vet Name" value={stallionForm.vetName} onChange={(e) => setStallionForm({ ...stallionForm, vetName: e.target.value })} />
+            <input placeholder="Vet Phone" value={stallionForm.vetPhone} onChange={(e) => setStallionForm({ ...stallionForm, vetPhone: e.target.value })} />
+            <input placeholder="Vet Email" type="email" value={stallionForm.vetEmail} onChange={(e) => setStallionForm({ ...stallionForm, vetEmail: e.target.value })} />
             <button type="submit">Add Stallion</button>
           </form>
         )}
