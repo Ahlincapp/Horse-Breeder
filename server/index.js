@@ -760,8 +760,15 @@ app.delete('/api/mares/:mareId', authMiddleware, async (req, res) => {
   const { mareId } = req.params;
   try {
     if (usePostgres) {
+      // Delete related records first
+      await pool.query('DELETE FROM cycles WHERE mare_id = $1', [mareId]);
+      await pool.query('DELETE FROM mare_breeding WHERE mare_id = $1', [mareId]);
+      await pool.query('DELETE FROM collections WHERE mare_id = $1', [mareId]);
       await pool.query('DELETE FROM mares WHERE id = $1', [mareId]);
     } else {
+      db.cycles = db.cycles.filter(c => c.mareId !== parseInt(mareId));
+      db.mare_breeding = db.mare_breeding.filter(b => b.mareId !== parseInt(mareId));
+      db.collections = db.collections.filter(c => c.mareId !== parseInt(mareId));
       db.mares = db.mares.filter(m => m.id !== parseInt(mareId));
       saveJsonDb();
     }
@@ -909,8 +916,13 @@ app.delete('/api/stallions/:stallionId', authMiddleware, async (req, res) => {
   const { stallionId } = req.params;
   try {
     if (usePostgres) {
+      // Delete related records first
+      await pool.query('DELETE FROM collections WHERE stallion_id = $1', [stallionId]);
+      await pool.query('DELETE FROM stallion_schedule WHERE stallion_id = $1', [stallionId]);
       await pool.query('DELETE FROM stallions WHERE id = $1', [stallionId]);
     } else {
+      db.collections = db.collections.filter(c => c.stallionId !== parseInt(stallionId));
+      db.stallion_schedule = db.stallion_schedule.filter(s => s.stallionId !== parseInt(stallionId));
       db.stallions = db.stallions.filter(s => s.id !== parseInt(stallionId));
       saveJsonDb();
     }
