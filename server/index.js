@@ -764,11 +764,13 @@ app.delete('/api/mares/:mareId', authMiddleware, async (req, res) => {
       await pool.query('DELETE FROM cycles WHERE mare_id = $1', [mareId]);
       await pool.query('DELETE FROM mare_breeding WHERE mare_id = $1', [mareId]);
       await pool.query('DELETE FROM collections WHERE mare_id = $1', [mareId]);
+      await pool.query('DELETE FROM vet_appointments WHERE mare_id = $1', [mareId]);
       await pool.query('DELETE FROM mares WHERE id = $1', [mareId]);
     } else {
       db.cycles = db.cycles.filter(c => c.mareId !== parseInt(mareId));
       db.mare_breeding = db.mare_breeding.filter(b => b.mareId !== parseInt(mareId));
       db.collections = db.collections.filter(c => c.mareId !== parseInt(mareId));
+      db.vet_appointments = db.vet_appointments.filter(v => v.mareId !== parseInt(mareId));
       db.mares = db.mares.filter(m => m.id !== parseInt(mareId));
       saveJsonDb();
     }
