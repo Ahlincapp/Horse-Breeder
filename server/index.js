@@ -964,17 +964,19 @@ app.get('/api/stallions/:id/report', authMiddleware, async (req, res) => {
       const stallionResult = await pool.query('SELECT * FROM stallions WHERE id = $1', [stallionId]);
       if (stallionResult.rows.length > 0) {
         const s = stallionResult.rows[0];
-        stallion = { id: s.id, registeredName: s.registered_name, barnName: s.barn_name, registry: s.registry, registrationNumber: s.registration_number, semenType: s.semen_type };
+        stallion = { id: s.id, registeredName: s.registered_name, barnName: s.barn_name, registry: s.registry, registrationNumber: s.registration_number, semenType: s.semen_type, breederName: s.breeder_name, breederPhone: s.breeder_phone, breederEmail: s.breeder_email, vetName: s.vet_name, vetPhone: s.vet_phone, vetEmail: s.vet_email };
       }
       const result = await pool.query('SELECT c.*, m.registered_name as mare_name, m.registration_number as mare_reg FROM collections c LEFT JOIN mares m ON c.mare_id = m.id WHERE c.stallion_id = $1', [stallionId]);
       res.json({ stallion, collections: result.rows });
     } else {
       stallion = db.stallions.find(s => s.id === parseInt(stallionId));
+      // Include breeder and vet info in report
+      const stallionData = stallion ? { id: stallion.id, registeredName: stallion.registeredName, barnName: stallion.barnName, registry: stallion.registry, registrationNumber: stallion.registrationNumber, semenType: stallion.semenType, breederName: stallion.breederName, breederPhone: stallion.breederPhone, breederEmail: stallion.breederEmail, vetName: stallion.vetName, vetPhone: stallion.vetPhone, vetEmail: stallion.vetEmail } : null;
       const collections = db.collections.filter(c => c.stallionId === parseInt(stallionId)).map(c => {
         const mare = db.mares.find(m => m.id === c.mareId);
         return { ...c, mareName: mare?.registeredName, mareRegistrationNumber: mare?.registrationNumber };
       });
-      res.json({ stallion, collections });
+      res.json({ stallion: stallionData, collections });
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
